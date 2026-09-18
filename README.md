@@ -67,6 +67,17 @@ docker-compose up -d --build                                                  # 
 docker-compose -f docker-compose.yml -f deploy/docker-compose.stand.yml up -d # + витрина на порту 80
 ```
 
+**Совместимость docker-compose 1.29.2.** Требуемая ТЗ версия — из 2021 года. На чистой машине
+`docker-compose up -d --build` отрабатывает полностью (проверено на Ubuntu 22.04 c Docker 29.8).
+Если на стенде уже остались контейнеры прошлого запуска, compose 1.29.2 на новых версиях Docker падает
+при их пересоздании с `KeyError: 'ContainerConfig'` — это ограничение самого compose v1, а не сервиса.
+Лечится одной командой перед запуском:
+
+```bash
+docker-compose down          # либо: docker rm -f heatnet_app_1 heatnet_db_1
+docker-compose up -d --build
+```
+
 Замеры на стенде (конкурсный набор, 17 точек присоединения, 88 ограничений):
 
 | Показатель | Значение |
