@@ -1,0 +1,39 @@
+# docker-compose 1.29.2 (ТЗ 3.2): формат файла 3.8. Запуск: docker-compose up --build -d
+version: "3.8"
+
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: heatnet
+      POSTGRES_USER: heatnet
+      POSTGRES_PASSWORD: heatnet
+    volumes:
+      - heatnet-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heatnet -d heatnet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      HEATNET_DB_URL: jdbc:postgresql://db:5432/heatnet
+      HEATNET_DB_USER: heatnet
+      HEATNET_DB_PASSWORD: heatnet
+      HEATNET_STORAGE: /var/lib/heatnet
+      HEATNET_TMP: /tmp/heatnet
+      HEATNET_WORKERS: "2"
+      JAVA_OPTS: "-Xmx6g"
+    ports:
+      - "8080:8080"
+    volumes:
+      - heatnet-data:/var/lib/heatnet
+    restart: unless-stopped
+
+volumes:
+  heatnet-db:
+  heatnet-data:

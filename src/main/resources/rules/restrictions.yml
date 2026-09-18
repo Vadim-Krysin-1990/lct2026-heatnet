@@ -1,0 +1,111 @@
+# Правила учёта пространственных ограничений по типу restriction_type.
+# Источник: ТП табл. 5.1, уточнения сессии Q&A 16.09.2026. Редактируется экспертом.
+#
+# rule: forbidden — пересечение запрещено, обход с отступом clearance
+#       special   — допускается специальный проход (участок laying_method=special, стоимость × k_special)
+# geometry: polygon — расстояние от внешней границы полигона
+#           line    — входная геометрия считается осью, расстояние между внешними границами габаритов
+# clearance_m / clearance_by_dn — минимальное горизонтальное расстояние (для ОКС зависит от ДУ новой сети)
+# min_crossing_angle_deg — минимальный угол пересечения к оси препятствия (ось строится сервисом)
+# zone_margin_m — границы спецучастка: полигон + margin с каждой стороны (polygon) или ±margin от точки (line)
+# depth — правило по глубине для доп. задачи
+# При наложении нескольких спецзон применяется один спецучасток и максимальный k_special (Q&A).
+
+default_rule: forbidden          # неизвестный тип ограничения → обходим (безопасное допущение) + предупреждение
+default_clearance_m: 1.0
+
+types:
+  oks:
+    title: "Существующий или перспективный ОКС"
+    rule: forbidden
+    geometry: polygon
+    clearance_by_dn:            # 5 м при ДУ < 500; 7 м при 500–800; 9 м при ≥ 900
+      - {max_dn: 499,  m: 5.0}
+      - {max_dn: 800,  m: 7.0}
+      - {max_dn: 1400, m: 9.0}
+    source: "ТП табл. 5.1"
+  oks_existing:
+    alias_of: oks
+  oks_future:
+    alias_of: oks
+  park:
+    title: "Парк"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+    source: "ТП табл. 5.1"
+  social_area:
+    title: "Территория социального объекта"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+    source: "ТП табл. 5.1"
+  prohibited_site:
+    title: "Запрещённая территория"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+    source: "ТП табл. 5.1"
+  water:
+    title: "Водный объект"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+    source: "ТП табл. 5.1"
+  road:
+    title: "Автомобильная дорога"
+    rule: special
+    geometry: polygon
+    clearance_m: 1.5
+    min_crossing_angle_deg: 45
+    zone_margin_m: 3.0
+    k_special: 1.60
+    depth: {position: below, min_top_depth_m: 1.0}
+    source: "ТП табл. 5.1"
+  tram_tracks:
+    title: "Трамвайные пути"
+    rule: special
+    geometry: polygon
+    clearance_m: 1.5
+    min_crossing_angle_deg: 45
+    zone_margin_m: 3.0
+    k_special: 1.75
+    depth: {position: below, min_top_depth_m: 1.2}
+    source: "ТП табл. 5.1"
+  railway:
+    title: "Железнодорожные пути"
+    rule: special
+    geometry: polygon
+    clearance_m: 1.5
+    min_crossing_angle_deg: 45
+    zone_margin_m: 3.0
+    k_special: 1.75
+    depth: {position: below, min_top_depth_m: 1.2}
+    source: "ДОПУЩЕНИЕ: тип есть в датасете, в ТП табл. 5.1 отсутствует; принято как трамвайные пути. Вопрос модератору задан."
+  gas_pipeline:
+    title: "Газопровод"
+    rule: special
+    geometry: line
+    clearance_m: 2.0
+    zone_margin_m: 2.0
+    k_special: 1.25
+    depth: {position: any, min_vertical_clearance_m: 0.2}
+    source: "ТП табл. 5.1"
+  power_cable:
+    title: "Силовой кабель до 35 кВ"
+    rule: special
+    geometry: line
+    clearance_m: 2.0
+    zone_margin_m: 2.0
+    k_special: 1.15
+    depth: {position: any, min_vertical_clearance_m: 0.5}
+    source: "ТП табл. 5.1"
+  heat_network:
+    title: "Существующая тепловая сеть (независимое пересечение без врезки)"
+    rule: special
+    geometry: line
+    clearance_m: 1.0
+    zone_margin_m: 2.0
+    k_special: 1.05
+    depth: {position: any, min_vertical_clearance_m: 0.5}
+    source: "ТП табл. 5.1"

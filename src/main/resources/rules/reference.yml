@@ -1,0 +1,75 @@
+# Справочные параметры расчёта. Источник — Техническое приложение к кейсу (ТП), ЛЦТ 2026.
+# Файл редактируется без перекомпиляции: положите свою копию в каталог HEATNET_RULES.
+
+crs:
+  input: "EPSG:4326"        # ТП §2: вход и выход в WGS 84
+  calc_proj4: "+proj=utm +zone=37 +datum=WGS84 +units=m +no_defs"   # EPSG:32637, все длины/буферы
+
+# ТП табл. 4.1 (ДУ, пропускная способность, предельная длина, стоимость 1 м) + табл. 4.2 (габариты)
+diameters:
+  - {dn: 50,   capacity_tph: 3.5,     max_length_m: 181,   new_cost_per_m: 74023,  recon_cost_per_m: 96180,  shell_od_m: 0.125, gap_m: 0.150, width_m: 0.400, height_m: 0.125}
+  - {dn: 65,   capacity_tph: 8.3,     max_length_m: 245,   new_cost_per_m: 78631,  recon_cost_per_m: 109989, shell_od_m: 0.140, gap_m: 0.150, width_m: 0.430, height_m: 0.140}
+  - {dn: 80,   capacity_tph: 13.2,    max_length_m: 327,   new_cost_per_m: 83530,  recon_cost_per_m: 117582, shell_od_m: 0.160, gap_m: 0.150, width_m: 0.470, height_m: 0.160}
+  - {dn: 100,  capacity_tph: 22.3,    max_length_m: 419,   new_cost_per_m: 89748,  recon_cost_per_m: 133694, shell_od_m: 0.180, gap_m: 0.150, width_m: 0.510, height_m: 0.180}
+  - {dn: 125,  capacity_tph: 40.2,    max_length_m: 554,   new_cost_per_m: 97275,  recon_cost_per_m: 148030, shell_od_m: 0.225, gap_m: 0.150, width_m: 0.600, height_m: 0.225}
+  - {dn: 150,  capacity_tph: 65.1,    max_length_m: 696,   new_cost_per_m: 105507, recon_cost_per_m: 152295, shell_od_m: 0.250, gap_m: 0.150, width_m: 0.650, height_m: 0.250}
+  - {dn: 200,  capacity_tph: 152.3,   max_length_m: 1042,  new_cost_per_m: 120275, recon_cost_per_m: 181766, shell_od_m: 0.315, gap_m: 0.250, width_m: 0.880, height_m: 0.315}
+  - {dn: 250,  capacity_tph: 274.9,   max_length_m: 1379,  new_cost_per_m: 135323, recon_cost_per_m: 202030, shell_od_m: 0.400, gap_m: 0.250, width_m: 1.050, height_m: 0.400}
+  - {dn: 300,  capacity_tph: 437.4,   max_length_m: 1718,  new_cost_per_m: 150022, recon_cost_per_m: 228707, shell_od_m: 0.450, gap_m: 0.250, width_m: 1.150, height_m: 0.450}
+  - {dn: 400,  capacity_tph: 943.1,   max_length_m: 2477,  new_cost_per_m: 190299, recon_cost_per_m: 271317, shell_od_m: 0.560, gap_m: 0.250, width_m: 1.370, height_m: 0.560}
+  - {dn: 500,  capacity_tph: 1663.4,  max_length_m: 3245,  new_cost_per_m: 224137, recon_cost_per_m: 333884, shell_od_m: 0.710, gap_m: 0.250, width_m: 1.670, height_m: 0.710}
+  - {dn: 600,  capacity_tph: 2627.7,  max_length_m: 4037,  new_cost_per_m: 264790, recon_cost_per_m: 372703, shell_od_m: 0.800, gap_m: 0.250, width_m: 1.850, height_m: 0.800}
+  - {dn: 700,  capacity_tph: 3735.1,  max_length_m: 4775,  new_cost_per_m: 324298, recon_cost_per_m: 439571, shell_od_m: 0.900, gap_m: 0.250, width_m: 2.050, height_m: 0.900}
+  - {dn: 800,  capacity_tph: 5296.8,  max_length_m: 5644,  new_cost_per_m: 325996, recon_cost_per_m: 489918, shell_od_m: 1.000, gap_m: 0.250, width_m: 2.250, height_m: 1.000}
+  - {dn: 900,  capacity_tph: 7165.0,  max_length_m: 6518,  new_cost_per_m: 327693, recon_cost_per_m: 553607, shell_od_m: 1.100, gap_m: 0.250, width_m: 2.450, height_m: 1.100}
+  - {dn: 1000, capacity_tph: 9391.8,  max_length_m: 7419,  new_cost_per_m: 418777, recon_cost_per_m: 606679, shell_od_m: 1.200, gap_m: 0.250, width_m: 2.650, height_m: 1.200}
+  - {dn: 1200, capacity_tph: 15012.8, max_length_m: 9288,  new_cost_per_m: 428074, recon_cost_per_m: 825692, shell_od_m: 1.425, gap_m: 0.250, width_m: 3.100, height_m: 1.425}
+  - {dn: 1400, capacity_tph: 22501.9, max_length_m: 11276, new_cost_per_m: 683417, recon_cost_per_m: 978584, shell_od_m: 1.600, gap_m: 0.250, width_m: 3.450, height_m: 1.600}
+
+# ТП §3 и Q&A 16.09: при превышении предельной длины допускается поднять ДУ на одну ступень, не более
+length_limit:
+  allow_upsize_steps: 1
+
+# ТП §8.2: тепловые камеры и врезки
+chambers:
+  max_branches: 4                        # к камере ≤4 участка: 1 к источнику + ≤3
+  existing_chamber_tie_in_radius_m: 10   # врезка ≤10 м от существующей камеры → в камеру
+  cost_by_max_dn:                        # одна шкала для новой камеры и реконструкции существующей
+    - {max_dn: 200,  cost: 3000000}
+    - {max_dn: 500,  cost: 5000000}
+    - {max_dn: 1000, cost: 8000000}
+    - {max_dn: 1400, cost: 12000000}
+tie_in:
+  cost: 5000000                          # каждая независимая врезка, не зависит от ДУ
+
+# ТП §8.3: штраф за неподключённый ОКС = fixed + per_tph × G
+unconnected_penalty:
+  fixed: 100000000
+  per_tph: 500000
+
+# ТП §9: S = cost_weight·(C / cost_base) + length_weight·(L / length_base)
+ranking:
+  cost_weight: 0.7
+  cost_base: 25000000
+  length_weight: 0.3
+  length_base: 100
+
+# ТП §6, приложение по глубине (дополнительная задача)
+depth:
+  normal_top_depth_m: 3.0
+  min_top_depth_m: 0.7
+  max_slope: 0.10                        # м/м: на 1 м глубины ≥10 м по горизонтали
+  plateau_half_length_m: 2.0             # полка по 2 м с каждой стороны точки пересечения
+  extra_cost_per_m_depth: 0.10           # Kгл = 1 + 0.10·(h − 3) при h > 3
+  free_depth_m: 3.0
+  step_m: 0.5                            # ТЗ 2.13; в актуальном ТП шага нет — используется только для перебора
+
+# ТП §4.3: условные габариты существующих линейных объектов (для доп. задачи)
+existing_utilities:
+  gas_pipeline: {width_m: 0.400, height_m: 0.400, top_depth_m: 2.8}
+  power_cable:  {width_m: 0.200, height_m: 0.200, top_depth_m: 2.7}
+  heat_network: {top_depth_m: 3.0}       # габарит по ДУ из табл. 4.2
+
+# Q&A 16.09: нестандартный угол поворота (не 45°/90°) — удорожание ×1.5; трассировка на
+# 8-направленной сетке нестандартных углов не создаёт, коэффициент оставлен для полноты
+nonstandard_angle_cost_factor: 1.5

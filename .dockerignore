@@ -1,0 +1,7 @@
+target/
+.git/
+.idea/
+*.log
+data/runs/
+docs/
+viewer/

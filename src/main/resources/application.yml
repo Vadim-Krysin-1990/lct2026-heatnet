@@ -1,0 +1,44 @@
+server:
+  port: ${HEATNET_PORT:8080}
+  tomcat:
+    max-swallow-size: -1
+
+spring:
+  application:
+    name: heatnet
+  datasource:
+    url: ${HEATNET_DB_URL:jdbc:postgresql://localhost:5432/heatnet}
+    username: ${HEATNET_DB_USER:heatnet}
+    password: ${HEATNET_DB_PASSWORD:heatnet}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate.jdbc.lob.non_contextual_creation: true
+  servlet:
+    multipart:
+      # ТЗ 3.2: входной файл до 3 ГБ, обработка через временное дисковое хранилище
+      max-file-size: 3200MB
+      max-request-size: 3300MB
+      file-size-threshold: 1MB
+      location: ${HEATNET_TMP:/tmp/heatnet}
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+heatnet:
+  storage-dir: ${HEATNET_STORAGE:/var/lib/heatnet}   # входные файлы, результаты, временные NDJSON
+  workers: ${HEATNET_WORKERS:2}                         # параллельных расчётов; остальные — в очереди
+  rules-dir: ${HEATNET_RULES:}                          # если пусто — правила из classpath:rules/
+
+logging:
+  level:
+    ru.intelligence.heatnet: INFO
