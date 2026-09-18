@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>heatnet — просмотр результата трассировки</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="lib/leaflet.css">
+<style>
+  html, body { height: 100%; margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c1d22; }
+  #app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+  #panel { padding: 14px 16px; overflow: auto; border-right: 1px solid #e3e3e8; background: #fafafc; }
+  #map { height: 100%; background: #f4f4f6; }
+  h1 { font-size: 17px; margin: 0 0 10px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+  .drop { border: 2px dashed #b8b8c4; border-radius: 10px; padding: 12px; text-align: center; color: #555; margin-bottom: 8px; background: #fff; }
+  .drop.over { border-color: #ff0053; background: #fff5f8; }
+  .drop input { display: block; margin: 8px auto 0; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  button, select { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid #c9c9d2; background: #fff; cursor: pointer; }
+  button.active { background: #310f53; color: #fff; border-color: #310f53; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td { padding: 3px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .legend span { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 6px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend .sq { width: 10px; height: 10px; }
+  .muted { color: #777; font-size: 12px; }
+  label.chk { display: block; margin: 2px 0; }
+  .leaflet-tooltip.dn { background: rgba(255,255,255,.85); border: none; box-shadow: none; font-size: 10px; padding: 1px 3px; color: #1f4e79; }
+  #notes { font-size: 12px; color: #a33; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <h1>heatnet · просмотр результата</h1>
+    <div class="muted">Команда Intelligence, ЛЦТ 2026, задача №2. Просмотрщик не входит в оцениваемый сервис — он для самопроверки и питча.</div>
+
+    <h2>Файлы</h2>
+    <div class="drop" id="dropIn">Входной GeoJSON (датасет)<input type="file" id="fileIn" accept=".geojson,.json"></div>
+    <div class="drop" id="dropOut">Результат сервиса (GeoJSON)<input type="file" id="fileOut" accept=".geojson,.json"></div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="osm"> подложка OpenStreetMap (нужен интернет)</label>
+    </div>
+
+    <h2>Вариант</h2>
+    <div class="row" id="variants"><span class="muted">загрузите результат</span></div>
+    <div id="summary"></div>
+    <div id="notes"></div>
+
+    <h2>Слои</h2>
+    <div id="layers"></div>
+
+    <h2>Легенда</h2>
+    <div class="legend">
+      <div><span style="background:#d62728"></span>существующая сеть (подпись id/ДУ)</div>
+      <div><span style="background:#1f77b4"></span>новый участок, обычная прокладка (подпись ДУ)</div>
+      <div><span style="background:#ff7f0e"></span>новый участок, специальный проход</div>
+      <div><span style="background:#e377c2;height:8px"></span>реконструкция существующего участка</div>
+      <div><span class="dot" style="background:#2ca02c"></span>точка подключения ОКС (расход, т/ч)</div>
+      <div><span class="sq" style="background:#d62728"></span>существующая камера · <span class="sq" style="background:#1f77b4"></span>новая камера</div>
+      <div><span class="dot" style="background:#9467bd"></span>врезка · <span class="dot" style="background:#111;width:6px;height:6px"></span>технический узел</div>
+      <div><span class="sq" style="background:#c8c8c8"></span>ОКС · <span class="sq" style="background:#9ecae1"></span>вода · <span class="sq" style="background:#f0c070"></span>ж/д, трамвай · <span class="sq" style="background:#d9d9d9;border:1px solid #888"></span>дорога</div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script src="lib/leaflet.js"></script>
+<script>
+(function () {
+  const map = L.map('map', { preferCanvas: true }).setView([55.699, 37.640], 15);
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  document.getElementById('osm').addEventListener('change', e => e.target.checked ? osm.addTo(map) : map.removeLayer(osm));
+
+  const groups = {};        // name -> L.LayerGroup
+  const layerToggles = document.getElementById('layers');
+  function group(name, title) {
+    if (!groups[name]) {
+      groups[name] = L.layerGroup().addTo(map);
+      const l = document.createElement('label'); l.className = 'chk';
+      const c = document.createElement('input'); c.type = 'checkbox'; c.checked = true;
+      c.addEventListener('change', () => c.checked ? groups[name].addTo(map) : map.removeLayer(groups[name]));
+      l.appendChild(c); l.appendChild(document.createTextNode(' ' + title));
+      layerToggles.appendChild(l);
+    }
+    return groups[name];
+  }
+  function popup(props) {
+    return '<table>' + Object.entries(props).map(([k, v]) => `<tr><td>${k}</td><td>${Array.isArray(v) ? v.join(', ') : (v === null ? '—' : v)}</td></tr>`).join('') + '</table>';
+  }
+  const fmt = n => n === undefined || n === null ? '—' : Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+  const fmtM = n => (Number(n) / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млн ₽';
+
+  // ---------- входные данные ----------
+  let inputBounds = null;
+  function renderInput(fc) {
+    ['oks', 'restr', 'net', 'chambers', 'points', 'source'].forEach(n => groups[n] && groups[n].clearLayers());
+    const gOks = group('oks', 'здания (ОКС)'), gRestr = group('restr', 'прочие ограничения'), gNet = group('net', 'существующая сеть'),
+          gCh = group('chambers', 'существующие камеры'), gPts = group('points', 'точки подключения'), gSrc = group('source', 'источник');
+    const all = L.geoJSON(fc, {
+      style: f => {
+        const p = f.properties; if (p.object_type === 'restriction') {
+          const t = p.restriction_type;
+          if (t === 'oks' || t === 'oks_future' || t === 'oks_existing') return { color: '#888', weight: .6, fillColor: '#c8c8c8', fillOpacity: .9 };
+          if (t === 'water') return { color: '#6baed6', weight: .6, fillColor: '#9ecae1', fillOpacity: .8 };
+          if (t === 'railway' || t === 'tram_tracks') return { color: '#c99', weight: .6, fillColor: '#f0c070', fillOpacity: .8 };
+          if (t === 'road') return { color: '#888', weight: .8, fillColor: '#d9d9d9', fillOpacity: .7 };
+          if (t === 'gas_pipeline') return { color: '#e6a100', weight: 2.5, dashArray: '6 4' };
+          if (t === 'power_cable') return { color: '#8a2be2', weight: 2.5, dashArray: '6 4' };
+          return { color: '#b06fb0', weight: .8, fillColor: '#e0b0e0', fillOpacity: .6 };
+        }
+        if (p.object_type === 'heat_network') return { color: '#d62728', weight: 3 };
+        if (p.object_type === 'oks_future' || p.object_type === 'oks_existing') return { color: '#888', weight: .6, fillColor: '#c8c8c8', fillOpacity: .9 };
+        return { color: '#333', weight: 1 };
+      },
+      pointToLayer: (f, ll) => {
+        const p = f.properties;
+        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="width:10px;height:10px;background:#d62728;border:1px solid #fff"></div>', iconSize: [10, 10] }) });
+        if (p.object_type === 'source') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="font-size:22px;line-height:22px">★</div>', iconSize: [22, 22] }) });
+        if (p.object_type === 'oks_connection_point') return L.circleMarker(ll, { radius: 6, color: '#111', weight: 1, fillColor: '#2ca02c', fillOpacity: 1 });
+        return L.circleMarker(ll, { radius: 4 });
+      },
+      onEachFeature: (f, layer) => {
+        const p = f.properties;
+        layer.bindPopup(popup(p));
+        if (p.object_type === 'heat_network') layer.bindTooltip(`${p.id}/${p.diameter}`, { permanent: true, direction: 'center', className: 'dn' });
+        if (p.object_type === 'oks_connection_point') layer.bindTooltip(`${p.id} (${p.flow_tph})`, { permanent: true, direction: 'right', className: 'dn' });
+        if (p.object_type === 'heat_chamber') layer.bindTooltip(String(p.id), { permanent: true, direction: 'right', className: 'dn' });
+        const t = p.object_type === 'restriction' ? ((p.restriction_type || '').startsWith('oks') ? gOks : gRestr)
+              : p.object_type === 'heat_network' ? gNet : p.object_type === 'heat_chamber' ? gCh
+              : p.object_type === 'oks_connection_point' ? gPts : p.object_type === 'source' ? gSrc : gOks;
+        t.addLayer(layer);
+      }
+    });
+    inputBounds = all.getBounds();
+    if (inputBounds.isValid()) map.fitBounds(inputBounds.pad(0.05));
+  }
+
+  // ---------- результат ----------
+  let result = null, current = null;
+  function renderVariants(fc) {
+    result = fc;
+    const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
+    const box = document.getElementById('variants'); box.innerHTML = '';
+    ids.forEach(id => {
+      const b = document.createElement('button'); b.textContent = 'Вариант ' + id;
+      const s = fc.features.find(f => f.properties.object_type === 'variant_summary' && f.properties.variant_id === id);
+      if (s) b.title = 'rank ' + s.properties.rank + ', S = ' + s.properties.score;
+      b.addEventListener('click', () => showVariant(id));
+      box.appendChild(b);
+    });
+    if (ids.length) showVariant(ids[0]);
+  }
+  function showVariant(id) {
+    current = id;
+    document.querySelectorAll('#variants button').forEach(b => b.classList.toggle('active', b.textContent.endsWith(' ' + id)));
+    ['rnet', 'rspecial', 'rrecon', 'rtie', 'rch', 'rnode'].forEach(n => groups[n] && groups[n].clearLayers());
+    const gNet = group('rnet', 'новая сеть'), gSp = group('rspecial', 'спецпроходы'), gRec = group('rrecon', 'реконструкция'),
+          gTie = group('rtie', 'врезки'), gCh = group('rch', 'новые камеры'), gNode = group('rnode', 'технические узлы');
+    const feats = result.features.filter(f => f.properties.variant_id === id);
+    let summary = null;
+    L.geoJSON({ type: 'FeatureCollection', features: feats.filter(f => f.geometry) }, {
+      style: f => {
+        const p = f.properties;
+        if (p.object_type === 'heat_network') return { color: p.laying_method === 'special' ? '#ff7f0e' : '#1f77b4', weight: p.diameter >= 200 ? 4 : 2.5 };
+        if (p.object_type === 'heat_network_reconstruction') return { color: '#e377c2', weight: 9, opacity: .55 };
+        return { color: '#333' };
+      },
+      pointToLayer: (f, ll) => {
+        const p = f.properties;
+        if (p.object_type === 'tie_in') return L.circleMarker(ll, { radius: 7, color: '#111', weight: 1, fillColor: '#9467bd', fillOpacity: 1 });
+        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="width:11px;height:11px;background:#1f77b4;border:1px solid #fff;transform:rotate(45deg)"></div>', iconSize: [11, 11] }) });
+        if (p.object_type === 'heat_chamber_reconstruction') return L.circleMarker(ll, { radius: 9, color: '#e377c2', weight: 3, fill: false });
+        if (p.object_type === 'technical_node') return L.circleMarker(ll, { radius: 3, color: '#111', fillColor: '#111', fillOpacity: 1 });
+        return L.circleMarker(ll, { radius: 4 });
+      },
+      onEachFeature: (f, layer) => {
+        const p = f.properties;
+        layer.bindPopup(popup(p));
+        if (p.object_type === 'heat_network') {
+          const depth = p.depth_start != null ? ` · ${p.depth_start}→${p.depth_end} м` : '';
+          layer.bindTooltip(`ДУ${p.diameter} · ${fmt(p.flow_tph)} т/ч · ${fmt(p.length)} м${depth}`, { direction: 'center', className: 'dn', permanent: false });
+          (p.laying_method === 'special' ? gSp : gNet).addLayer(layer);
+        } else if (p.object_type === 'heat_network_reconstruction') gRec.addLayer(layer);
+        else if (p.object_type === 'tie_in') gTie.addLayer(layer);
+        else if (p.object_type === 'heat_chamber' || p.object_type === 'heat_chamber_reconstruction') gCh.addLayer(layer);
+        else if (p.object_type === 'technical_node') gNode.addLayer(layer);
+      }
+    });
+    feats.forEach(f => { if (f.properties.object_type === 'variant_summary') summary = f.properties; });
+    const counts = t => feats.filter(f => f.properties.object_type === t).length;
+    const s = summary || {};
+    document.getElementById('summary').innerHTML = `<table>
+      <tr><td>Место (rank)</td><td><b>${s.rank ?? '—'}</b></td></tr>
+      <tr><td>Показатель S</td><td><b>${s.score ?? '—'}</b></td></tr>
+      <tr><td>Итоговая стоимость</td><td><b>${s.calculated_cost != null ? fmtM(s.calculated_cost) : '—'}</b></td></tr>
+      <tr><td>· новые участки</td><td>${s.construction_cost != null ? fmtM(s.construction_cost) : '—'}</td></tr>
+      <tr><td>· новые камеры</td><td>${s.chamber_construction_cost != null ? fmtM(s.chamber_construction_cost) : '—'}</td></tr>
+      <tr><td>· врезки</td><td>${s.tie_in_cost != null ? fmtM(s.tie_in_cost) : '—'}</td></tr>
+      <tr><td>· реконструкция участков</td><td>${s.reconstruction_cost != null ? fmtM(s.reconstruction_cost) : '—'}</td></tr>
+      <tr><td>· реконструкция камер</td><td>${s.chamber_reconstruction_cost != null ? fmtM(s.chamber_reconstruction_cost) : '—'}</td></tr>
+      <tr><td>· штраф за неподключённые</td><td>${s.unconnected_penalty != null ? fmtM(s.unconnected_penalty) : '—'}</td></tr>
+      <tr><td>Длина новой сети</td><td>${fmt(s.new_network_length)} м</td></tr>
+      <tr><td>Длина реконструкции</td><td>${fmt(s.reconstruction_length)} м</td></tr>
+      <tr><td>Участков / врезок / камер / техузлов</td><td>${counts('heat_network')} / ${counts('tie_in')} / ${counts('heat_chamber')} / ${counts('technical_node')}</td></tr>
+      <tr><td>Неподключённые ОКС</td><td>${(s.unconnected_oks_ids && s.unconnected_oks_ids.length) ? s.unconnected_oks_ids.join(', ') : 'нет'}</td></tr>
+    </table>`;
+  }
+
+  // ---------- загрузка файлов ----------
+  function readFile(file, cb) {
+    const r = new FileReader();
+    r.onload = () => { try { cb(JSON.parse(r.result)); } catch (e) { alert('Не удалось разобрать ' + file.name + ': ' + e.message); } };
+    r.readAsText(file);
+  }
+  function bind(dropId, inputId, handler) {
+    const drop = document.getElementById(dropId), input = document.getElementById(inputId);
+    input.addEventListener('change', () => input.files[0] && readFile(input.files[0], handler));
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && readFile(e.dataTransfer.files[0], handler); });
+  }
+  bind('dropIn', 'fileIn', renderInput);
+  bind('dropOut', 'fileOut', renderVariants);
+  // если страница открыта с сервера (например, через python -m http.server), попробуем подтянуть образцы
+  fetch('../data/samples/contest_dataset.geojson').then(r => r.ok ? r.json() : null).then(fc => fc && renderInput(fc)).catch(() => {});
+  fetch('../data/samples/contest_result.geojson').then(r => r.ok ? r.json() : null).then(fc => fc && renderVariants(fc)).catch(() => {});
+})();
+</script>
+</body>
+</html>

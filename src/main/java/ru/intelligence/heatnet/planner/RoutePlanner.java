@@ -270,11 +270,11 @@ public class RoutePlanner {
         RasterWindow w = new RasterWindow(env, rr.gridStepM);
         double halfWidth = ref.spec(clearanceDn).widthM / 2;
         for (ObstacleField.Obstacle o : field.query(env)) {
-            if (o.blocked != null) w.block(o.blocked, o.envelope);
-            if (o.specialZoneGeom != null) {
+            if (o.getBlocked() != null) w.block(o.getBlocked(), o.envelope);
+            if (o.getSpecialZoneGeom() != null) {
                 RasterWindow.Zone z = new RasterWindow.Zone();
                 z.obstacleId = o.id; z.type = o.type; z.k = o.kSpecial; z.axisBearing = o.axisBearing; z.minAngleDeg = o.minAngleDeg;
-                z.geom = o.specialZoneGeom;
+                z.geom = o.getSpecialZoneGeom();
                 if (strategy.depthMode && o.rule.isLine() && o.rule.depth != null) {
                     Integer dnExisting = "heat_network".equals(o.type) && topo.segment(o.id) != null ? topo.segment(o.id).diameter : null;
                     int dnNew = ref.diameterForFlow(cp.flowTph).dn;
