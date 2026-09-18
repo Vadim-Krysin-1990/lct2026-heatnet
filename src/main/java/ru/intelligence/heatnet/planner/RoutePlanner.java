@@ -48,6 +48,8 @@ public class RoutePlanner {
         public List<String> excludedTieIns = new ArrayList<>();
         /** Надбавка к стоимости присоединения к уже построенной новой сети (вариант «отдельные части сети»). */
         public double attachPenalty = 0;
+        /** Режим с учётом глубины: стоимость профиля пересечений влияет на выбор маршрута. */
+        public boolean depthMode = false;
         public String description;
     }
 
@@ -70,6 +72,7 @@ public class RoutePlanner {
     private final List<InputModel.Restriction> buildings = new ArrayList<>();
     private final int clearanceDn;
     private final double clearance;
+    private final ru.intelligence.heatnet.depth.DepthRules depthRules;
 
     public RoutePlanner(RulesService rules, InputModel model, NetworkTopology topo, ObstacleField field) {
         this.rules = rules;
@@ -80,6 +83,7 @@ public class RoutePlanner {
         this.rr = rules.routing();
         this.clearanceDn = field.clearanceDn();
         this.clearance = rules.restrictions().resolve("oks").clearance(clearanceDn, rules.restrictions().defaultClearanceM);
+        this.depthRules = new ru.intelligence.heatnet.depth.DepthRules(ref, rules.restrictions());
         for (InputModel.Restriction r : model.restrictions) if (r.type != null && r.type.startsWith("oks")) buildings.add(r);
     }
 
@@ -125,7 +129,7 @@ public class RoutePlanner {
         if (!strategy.attachToNewNetwork && !nb.edges().isEmpty()) {
             // раздельное подключение невозможно без пересечения уже построенных участков → объединяем в общую сеть (ТЗ 2.3)
             Strategy merged = new Strategy();
-            merged.name = strategy.name; merged.order = strategy.order; merged.excludedTieIns = strategy.excludedTieIns; merged.attachToNewNetwork = true;
+            merged.name = strategy.name; merged.order = strategy.order; merged.excludedTieIns = strategy.excludedTieIns; merged.attachToNewNetwork = true; merged.depthMode = strategy.depthMode; merged.attachPenalty = strategy.attachPenalty;
             diag.info("ROUTE_MERGE", "Точка " + cp.id + ": отдельная трасса пересекала бы уже построенную сеть — точка присоединена к новой сети", cp.id);
             if (routeWithExits(cp, merged, nb, candidates, cnew, pr, diag)) return;
         }
@@ -145,7 +149,7 @@ public class RoutePlanner {
             for (ExitFinder.Exit e : candidates) win.expandToInclude(e.exitPoint);
             for (RasterWindow.Goal g : goals) win.expandToInclude(g.geom.getEnvelopeInternal());
             win.expandBy(rr.windowMarginM);
-            RasterWindow w = buildWindow(win, goals);
+            RasterWindow w = buildWindow(win, goals, strategy, cp);
             boolean[] base = w.blocked.clone();
             int tried = 0;
             for (ExitFinder.Exit exit : candidates) {
@@ -262,7 +266,7 @@ public class RoutePlanner {
         return n == null ? 0 : n.degree();
     }
 
-    private RasterWindow buildWindow(Envelope env, List<RasterWindow.Goal> goals) {
+    private RasterWindow buildWindow(Envelope env, List<RasterWindow.Goal> goals, Strategy strategy, ConnectionPoint cp) {
         RasterWindow w = new RasterWindow(env, rr.gridStepM);
         double halfWidth = ref.spec(clearanceDn).widthM / 2;
         for (ObstacleField.Obstacle o : field.query(env)) {
@@ -271,6 +275,12 @@ public class RoutePlanner {
                 RasterWindow.Zone z = new RasterWindow.Zone();
                 z.obstacleId = o.id; z.type = o.type; z.k = o.kSpecial; z.axisBearing = o.axisBearing; z.minAngleDeg = o.minAngleDeg;
                 z.geom = o.specialZoneGeom;
+                if (strategy.depthMode && o.rule.isLine() && o.rule.depth != null) {
+                    Integer dnExisting = "heat_network".equals(o.type) && topo.segment(o.id) != null ? topo.segment(o.id).diameter : null;
+                    int dnNew = ref.diameterForFlow(cp.flowTph).dn;
+                    ru.intelligence.heatnet.depth.DepthRules.Crossing d = depthRules.decide(o.type, dnExisting, dnNew, ref.spec(dnNew).newCostPerM);
+                    z.entryPenalty = d.position == null ? ref.tieIn.cost * 4 : d.extraCost;   // конфликт по глубине — сильный штраф, но не запрет
+                }
                 w.addZone(z);
             }
         }

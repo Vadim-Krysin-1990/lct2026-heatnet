@@ -63,6 +63,7 @@ public class ReferenceRules {
         public double extraCostPerMDepth = 0.10;
         public double freeDepthM = 3.0;
         public double stepM = 0.5;
+        public double maxTopDepthM = 10.0;
     }
 
     public static class Utility {

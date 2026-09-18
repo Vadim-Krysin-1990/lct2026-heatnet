@@ -113,6 +113,7 @@ public class AStarRouter {
                 }
                 double len = (DC[nd] != 0 && DR[nd] != 0) ? w.step * SQRT2 : w.step;
                 double stepCost = len * costPerM * k + turn * turnPenaltyM * costPerM;
+                if (zNext != 0 && zHere == 0 && w.goalKind[ncell] == 0) stepCost += w.zones.get(zNext - 1).entryPenalty;
                 int ns = ncell * 8 + nd;
                 double ng = gc + stepCost;
                 if (ng < g[ns]) {

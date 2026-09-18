@@ -35,6 +35,8 @@ public class RasterWindow {
         public Double axisBearing;
         public Double minAngleDeg;
         public Geometry geom;
+        /** Надбавка за вход в зону (режим глубины: стоимость профиля пересечения), руб. */
+        public double entryPenalty = 0;
     }
 
     public static class Goal {

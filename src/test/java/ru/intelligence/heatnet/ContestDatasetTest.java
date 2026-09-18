@@ -76,4 +76,21 @@ class ContestDatasetTest {
         assertEquals(1, best.rank);
         assertTrue(best.unconnectedOksIds.size() < m.points.size(), "ни одна точка не подключена");
     }
+
+    @Test
+    void depthModeOnContestDataset() throws Exception {
+        RulesService rules = RulesService.standalone();
+        InputLoader loader = new InputLoader(rules);
+        InputModel m;
+        try (InputStream in = getClass().getResourceAsStream("/contest_dataset.geojson")) { m = loader.load(in); }
+        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(m, true);
+        assertFalse(out.variants.isEmpty());
+        for (Variant v : out.variants) {
+            for (Variant.NewSegment s : v.segments) { assertNotNull(s.depthStart, s.id); assertNotNull(s.depthEnd, s.id); }
+            System.out.printf("Глубина, вариант %s (%s): участков %d, техузлов %d, C=%.0f, L=%.1f, S=%.3f%n", v.variantId, v.strategy, v.segments.size(), v.techNodes.size(), v.calculatedCost, v.length, v.score);
+        }
+        try (FileOutputStream fos = new FileOutputStream(Paths.get("target").resolve("contest_result_depth.geojson").toFile())) {
+            new GeoJsonWriter(loader.crs()).write(out.variants, fos);
+        }
+    }
 }

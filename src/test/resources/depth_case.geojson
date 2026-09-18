@@ -1,0 +1,152 @@
+{
+ "type": "FeatureCollection",
+ "name": "depth_case",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "src",
+    "object_type": "source",
+    "name": "Источник"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     37.6,
+     55.75
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "n1",
+    "object_type": "heat_network",
+    "diameter": 300,
+    "flow_tph": 100,
+    "upstream_object_id": "src"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      37.6,
+      55.75
+     ],
+     [
+      37.60319226,
+      55.75
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "c1",
+    "object_type": "heat_chamber",
+    "diameter": 300,
+    "upstream_object_id": "n1"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     37.60319226,
+     55.75
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "p1",
+    "object_type": "oks_connection_point",
+    "flow_tph": 30.0
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     37.60159613,
+     55.75134747
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "g1",
+    "object_type": "restriction",
+    "restriction_type": "gas_pipeline"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      37.59840387,
+      55.75044916
+     ],
+     [
+      37.6047884,
+      55.75044916
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "k1",
+    "object_type": "restriction",
+    "restriction_type": "power_cable"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      37.59840387,
+      55.75089831
+     ],
+     [
+      37.6047884,
+      55.75089831
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "r1",
+    "object_type": "restriction",
+    "restriction_type": "road"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       37.59840387,
+       55.75107797
+      ],
+      [
+       37.6047884,
+       55.75107797
+      ],
+      [
+       37.6047884,
+       55.7511678
+      ],
+      [
+       37.59840387,
+       55.7511678
+      ],
+      [
+       37.59840387,
+       55.75107797
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

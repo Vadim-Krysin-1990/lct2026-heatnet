@@ -350,7 +350,7 @@ public class HydraulicsCalculator {
         }
     }
 
-    private void summarize(Variant v) {
+    public void summarize(Variant v) {
         v.constructionCost = 0; v.newNetworkLength = 0;
         for (Variant.NewSegment s : v.segments) { v.constructionCost += s.cost; v.newNetworkLength += s.length; }
         v.chamberConstructionCost = 0; for (Variant.NewChamber c : v.chambers) v.chamberConstructionCost += c.cost;

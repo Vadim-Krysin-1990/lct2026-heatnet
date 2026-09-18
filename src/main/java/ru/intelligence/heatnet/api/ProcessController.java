@@ -42,11 +42,12 @@ public class ProcessController {
                     + "при ошибках входных данных — 422 с диагностикой. Время расчёта — в заголовке X-Compute-Millis.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = "application/geo+json")
     public ResponseEntity<StreamingResponseBody> process(
-            @Parameter(description = "Входной файл GeoJSON") @RequestParam("file") MultipartFile file) throws IOException {
+            @Parameter(description = "Входной файл GeoJSON") @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины (Z-координаты, профиль, Kгл)") @RequestParam(name = "depth", defaultValue = "false") boolean depth) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
         JobService.SyncResult r;
         try (InputStream in = file.getInputStream()) {
-            r = jobs.processSync(in);
+            r = jobs.processSync(in, depth);
         }
         if (r.model.diagnostics.hasErrors()) {
             throw new InputValidationException(JobService.diagnosticsMap(r.model.diagnostics));
@@ -58,6 +59,7 @@ public class ProcessController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"result.geojson\"")
                 .header("X-Compute-Millis", String.valueOf(r.millis))
                 .header("X-Variants", String.valueOf(r.variants.size()))
+                .header("X-Depth-Mode", String.valueOf(depth))
                 .header("X-Diagnostics-Warnings", String.valueOf(r.model.diagnostics.count(ru.intelligence.heatnet.model.Diagnostics.Level.WARNING)))
                 .contentType(MediaType.parseMediaType("application/geo+json"))
                 .body(body);

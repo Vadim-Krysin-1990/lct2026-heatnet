@@ -95,7 +95,7 @@ public class JobService {
     }
 
     /** Синхронный расчёт для небольших файлов: возвращает варианты и диагностику без очереди. */
-    public SyncResult processSync(InputStream in) throws IOException {
+    public SyncResult processSync(InputStream in, boolean depth) throws IOException {
         long t0 = System.currentTimeMillis();
         InputLoader loader = new InputLoader(rules);
         InputModel model = loader.load(new BufferedInputStream(in));
@@ -106,7 +106,7 @@ public class JobService {
             r.variants = new ArrayList<>();
             return r;
         }
-        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model);
+        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth);
         r.variants = out.variants;
         r.millis = System.currentTimeMillis() - t0;
         return r;
@@ -141,7 +141,9 @@ public class JobService {
                 repo.save(j);
                 return;
             }
-            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model);
+            boolean depth = false;
+            try { depth = Boolean.TRUE.equals(json.readValue(j.getOptionsJson() == null ? "{}" : j.getOptionsJson(), Map.class).get("depth")); } catch (Exception ignore) { }
+            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth);
             Path result = storage.resolve("result").resolve(id + ".geojson");
             try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(result), 1 << 16)) {
                 new GeoJsonWriter(loader.crs()).write(out.variants, os);

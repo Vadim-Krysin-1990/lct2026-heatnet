@@ -36,7 +36,10 @@ public class VariantPlanner {
         public long millis;
     }
 
-    public Outcome plan(InputModel model) {
+    public Outcome plan(InputModel model) { return plan(model, false); }
+
+    /** @param depthMode дополнительная задача: трассировка с учётом глубины */
+    public Outcome plan(InputModel model, boolean depthMode) {
         long t0 = System.currentTimeMillis();
         Diagnostics diag = model.diagnostics;
         ReferenceRules ref = rules.reference();
@@ -52,6 +55,7 @@ public class VariantPlanner {
         for (String name : rules.routing().strategies) {
             RoutePlanner.Strategy st = strategy(name, first, topo);
             if (st == null) continue;
+            st.depthMode = depthMode;
             idx++;
             long ts = System.currentTimeMillis();
             Variant v = new Variant();
@@ -66,7 +70,9 @@ public class VariantPlanner {
                 expanded += r.expanded;
                 if (!r.connected) v.unconnectedOksIds.add(r.cp.id);
             }
-            new HydraulicsCalculator(ref, topo, model).compute(nb, v, diag);
+            HydraulicsCalculator hc = new HydraulicsCalculator(ref, topo, model);
+            hc.compute(nb, v, diag);
+            if (depthMode) new ru.intelligence.heatnet.depth.DepthProfiler(ref, rules.restrictions(), model).apply(v, diag, hc);
             v.computeMillis = System.currentTimeMillis() - ts;
             diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
@@ -94,6 +100,7 @@ public class VariantPlanner {
         }
         out.millis = System.currentTimeMillis() - t0;
         diag.stats.put("compute_millis", out.millis);
+        diag.stats.put("depth_mode", depthMode);
         return out;
     }
 
