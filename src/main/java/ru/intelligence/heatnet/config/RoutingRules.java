@@ -10,8 +10,10 @@ public class RoutingRules {
     public double candidateRadiusM = 700.0;
     public double candidateRadiusMaxM = 5000.0;
     public int maxCandidates = 6;
+    public int maxExitCandidates = 8;
     public double lineZoneMinAngleDeg = 45.0;
     public double snapToleranceM = 0.5;
+    public double altTieInExclusionRadiusM = 30.0;
     public int maxVariants = 3;
-    public List<String> strategies = List.of("shared_tree", "independent", "alt_tie_in");
+    public List<String> strategies = List.of("shared_tree", "alt_tie_in", "separate_parts", "flow_first");
 }

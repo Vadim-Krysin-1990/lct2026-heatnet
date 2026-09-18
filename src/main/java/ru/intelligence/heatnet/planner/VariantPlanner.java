@@ -46,10 +46,12 @@ public class VariantPlanner {
         ObstacleField field = new ObstacleField(model, rules.restrictions(), ref, rules.routing(), clearanceDn);
         diag.stats.put("clearance_dn", clearanceDn);
 
-        List<RoutePlanner.Strategy> strategies = strategies(model, topo);
         List<Variant> all = new ArrayList<>();
         int idx = 0;
-        for (RoutePlanner.Strategy st : strategies) {
+        Variant first = null;
+        for (String name : rules.routing().strategies) {
+            RoutePlanner.Strategy st = strategy(name, first, topo);
+            if (st == null) continue;
             idx++;
             long ts = System.currentTimeMillis();
             Variant v = new Variant();
@@ -65,10 +67,10 @@ public class VariantPlanner {
                 if (!r.connected) v.unconnectedOksIds.add(r.cp.id);
             }
             new HydraulicsCalculator(ref, topo, model).compute(nb, v, diag);
-            // Q&A: неподключение допустимо, если трасса дороже штрафа — проверяем пост-фактум по ветвям-листьям
             v.computeMillis = System.currentTimeMillis() - ts;
             diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
+            if (first == null) first = v;
         }
         // отбраковка неотличимых вариантов: одинаковые множества врезок и близкая стоимость/длина
         List<Variant> distinct = new ArrayList<>();
@@ -95,35 +97,52 @@ public class VariantPlanner {
         return out;
     }
 
-    private List<RoutePlanner.Strategy> strategies(InputModel model, NetworkTopology topo) {
-        List<RoutePlanner.Strategy> list = new ArrayList<>();
-        for (String name : rules.routing().strategies) {
-            RoutePlanner.Strategy s = new RoutePlanner.Strategy();
-            s.name = name;
-            switch (name) {
-                case "shared_tree":
-                    s.attachToNewNetwork = true; s.order = "distance";
-                    s.description = "Общая сеть: ближние к существующей сети точки образуют ствол, остальные присоединяются к новой сети через камеры";
-                    break;
-                case "independent":
-                    s.attachToNewNetwork = false; s.order = "distance";
-                    s.description = "Раздельное подключение: каждая точка своей врезкой в существующую сеть";
-                    break;
-                case "alt_tie_in":
-                    s.attachToNewNetwork = true; s.order = "flow_desc";
-                    s.description = "Общая сеть от крупных потребителей: ствол строится от точек с наибольшим расходом, врезки — альтернативные";
-                    break;
-                case "shared_tree_far_first":
-                    s.attachToNewNetwork = true; s.order = "distance_desc";
-                    s.description = "Общая сеть: ствол от самых удалённых точек";
-                    break;
-                default:
-                    s.attachToNewNetwork = true; s.order = "distance"; s.description = name;
+    /** Стратегия по имени; alt_tie_in строится относительно первого варианта (другие точки врезки). */
+    private RoutePlanner.Strategy strategy(String name, Variant first, NetworkTopology topo) {
+        RoutePlanner.Strategy s = new RoutePlanner.Strategy();
+        s.name = name;
+        switch (name) {
+            case "shared_tree":
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.description = "Общая сеть: ближние к существующей сети точки образуют ствол, остальные присоединяются к новой сети через камеры";
+                break;
+            case "alt_tie_in": {
+                if (first == null) return null;
+                s.attachToNewNetwork = true; s.order = "distance";
+                double r = rules.routing().altTieInExclusionRadiusM;
+                java.util.Set<String> excl = new java.util.HashSet<>();
+                for (Variant.TieIn t : first.tieIns) {
+                    for (InputModel.ExistingChamber ch : topo.chambers()) if (ch.geom.distance(t.geom) <= r) excl.add(ch.id);
+                    for (InputModel.ExistingSegment seg : topo.segments()) if (seg.geom.distance(t.geom) <= r) excl.add(seg.id);
+                }
+                s.excludedTieIns.addAll(excl);
+                s.description = "Другие точки врезки: объекты существующей сети в " + Math.round(r) + " м от врезок варианта 1 исключены, сеть построена заново";
+                break;
             }
-            list.add(s);
+            case "separate_parts":
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
+                s.description = "Отдельные части сети: присоединение к уже построенной новой сети штрафуется, точки вблизи существующей сети получают собственные врезки";
+                break;
+            case "flow_first":
+                s.attachToNewNetwork = true; s.order = "flow_desc";
+                s.description = "Общая сеть от крупных потребителей: ствол строится от точек с наибольшим расходом";
+                break;
+            case "far_first":
+                s.attachToNewNetwork = true; s.order = "distance_desc";
+                s.description = "Общая сеть: ствол от самых удалённых точек";
+                break;
+            case "independent":
+                s.attachToNewNetwork = false; s.order = "distance";
+                s.description = "Раздельное подключение: каждая точка своей врезкой; пересекающиеся трассы объединяются";
+                break;
+            default:
+                s.attachToNewNetwork = true; s.order = "distance"; s.description = name;
         }
-        return list;
+        return s;
     }
+
+    private ReferenceRules ref() { return rules.reference(); }
 
     private static boolean similar(Variant a, Variant b) {
         Set<String> ta = new HashSet<>(), tb = new HashSet<>();
@@ -133,7 +152,7 @@ public class VariantPlanner {
         if (a.chambers.size() != b.chambers.size()) return false;
         double dc = Math.abs(a.calculatedCost - b.calculatedCost) / Math.max(1, Math.max(a.calculatedCost, b.calculatedCost));
         double dl = Math.abs(a.length - b.length) / Math.max(1, Math.max(a.length, b.length));
-        return dc < 0.01 && dl < 0.01;
+        return dc < 0.03 && dl < 0.03;
     }
 
     /** Переименовать id объектов с префиксом варианта, чтобы id были уникальны во всём файле. */

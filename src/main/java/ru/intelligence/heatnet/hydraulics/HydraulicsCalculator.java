@@ -87,10 +87,11 @@ public class HydraulicsCalculator {
 
         // 2. ДУ по расходу
         Map<Edge, DiameterSpec> dn = new HashMap<>();
-        for (Edge e : nb.edges()) dn.put(e, ref.diameterForFlow(flow.get(e)));
+        Map<Edge, Integer> upsized = new HashMap<>();
+        for (Edge e : nb.edges()) { dn.put(e, ref.diameterForFlow(flow.get(e))); upsized.put(e, 0); }
 
         // 3. предельная длина: связные части одной номенклатуры (Q&A: при ветвлении суммируется вся часть)
-        for (int iter = 0; iter < 3; iter++) {
+        for (int iter = 0; iter < 1 + ref.lengthLimit.allowUpsizeSteps; iter++) {
             boolean changed = false;
             Set<Edge> seen = new HashSet<>();
             for (Edge start : nb.edges()) {
@@ -111,15 +112,17 @@ public class HydraulicsCalculator {
                 if (total > limit + 1e-6) {
                     DiameterSpec next = ref.nextStep(d);
                     int steps = ref.lengthLimit.allowUpsizeSteps;
-                    if (next != null && steps > 0) {
-                        // поднимаем ДУ у всей части (на одну ступень, ТП/Q&A)
-                        for (Edge e : comp) dn.put(e, next);
+                    boolean canUpsize = next != null;
+                    for (Edge e : comp) if (upsized.get(e) >= steps) canUpsize = false;
+                    if (canUpsize) {
+                        // поднимаем ДУ у всей части (не более чем на одну ступень, ТП §3 / Q&A)
+                        for (Edge e : comp) { dn.put(e, next); upsized.merge(e, 1, Integer::sum); }
                         v.notes.add("Часть сети ДУ" + d + " длиной " + GeoUtil.round(total, 1) + " м превышает предельную " + limit + " м — ДУ поднят до " + next.dn);
                         diag.info("LENGTH_LIMIT_UPSIZE", "Вариант " + v.variantId + ": часть сети ДУ" + d + " (" + GeoUtil.round(total, 1) + " м > " + limit + " м) поднята до ДУ" + next.dn, null);
                         changed = true;
                     } else {
-                        diag.warn("LENGTH_LIMIT_EXCEEDED", "Вариант " + v.variantId + ": часть сети ДУ" + d + " длиной " + GeoUtil.round(total, 1) + " м превышает предельную " + limit + " м, увеличить ДУ нельзя", null);
-                        v.notes.add("Превышена предельная длина для ДУ" + d + ": " + GeoUtil.round(total, 1) + " м > " + limit + " м");
+                        diag.warn("LENGTH_LIMIT_EXCEEDED", "Вариант " + v.variantId + ": часть сети ДУ" + d + " длиной " + GeoUtil.round(total, 1) + " м превышает предельную " + limit + " м, ДУ уже поднят на допустимую ступень — требуется ручная проработка (доп. камера/иная трасса)", null);
+                        v.notes.add("Превышена предельная длина для ДУ" + d + ": " + GeoUtil.round(total, 1) + " м > " + limit + " м, дальнейшее увеличение ДУ не допускается");
                     }
                 }
             }

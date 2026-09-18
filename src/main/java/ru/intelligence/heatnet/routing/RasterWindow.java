@@ -104,6 +104,29 @@ public class RasterWindow {
         });
     }
 
+    /** Достижима ли хоть одна клетка-цель из стартовой по свободным клеткам (8-связность, без правил направлений). */
+    public boolean reachable(int startCell) {
+        int n = cells();
+        boolean[] seen = new boolean[n];
+        int[] queue = new int[n];
+        int head = 0, tail = 0;
+        queue[tail++] = startCell; seen[startCell] = true;
+        while (head < tail) {
+            int cell = queue[head++];
+            if (goalKind[cell] > 0 && cell != startCell) return true;
+            if (terminal[cell]) continue;
+            int c = cell % cols, r = cell / cols;
+            for (int d = 0; d < 8; d++) {
+                int nc = c + AStarRouter.DC[d], nr = r + AStarRouter.DR[d];
+                if (!inside(nc, nr)) continue;
+                int ni = idx(nc, nr);
+                if (seen[ni] || blocked[ni]) continue;
+                seen[ni] = true; queue[tail++] = ni;
+            }
+        }
+        return false;
+    }
+
     public interface CellVisitor { void visit(int c, int r, Point center); }
 
     public void forEachCellIn(Envelope env, CellVisitor v) {

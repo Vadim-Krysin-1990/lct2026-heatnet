@@ -46,6 +46,8 @@ public class RoutePlanner {
         public String order = "distance";
         /** Исключить эти существующие объекты из кандидатов врезки (для альтернативных вариантов). */
         public List<String> excludedTieIns = new ArrayList<>();
+        /** Надбавка к стоимости присоединения к уже построенной новой сети (вариант «отдельные части сети»). */
+        public double attachPenalty = 0;
         public String description;
     }
 
@@ -116,34 +118,53 @@ public class RoutePlanner {
 
     private void routeOne(ConnectionPoint cp, Strategy strategy, NetworkBuilder nb, ExitFinder exits, PointResult pr, Diagnostics diag) {
         List<ExitFinder.Exit> candidates = exits.findAll(cp, buildings);
+        if (candidates.size() > rr.maxExitCandidates) candidates = candidates.subList(0, rr.maxExitCandidates);
         double cnew = ref.diameterForFlow(cp.flowTph).newCostPerM;
         int tried = 0;
-        for (ExitFinder.Exit exit : candidates) {
-            tried++;
-            Coordinate start = exit.exitPoint;
-            double radius = rr.candidateRadiusM;
-            while (radius <= rr.candidateRadiusMaxM) {
-                Envelope env = new Envelope(start);
-                env.expandToInclude(cp.geom.getCoordinate());
-                env.expandBy(radius);
-                List<RasterWindow.Goal> goals = collectGoals(cp, strategy, nb, env);
-                if (goals.isEmpty()) { radius *= 2; continue; }
-                Envelope win = new Envelope(start);
-                win.expandToInclude(cp.geom.getCoordinate());
-                for (RasterWindow.Goal g : goals) win.expandToInclude(g.geom.getEnvelopeInternal());
-                win.expandBy(rr.windowMarginM);
-                RasterWindow w = buildWindow(win, exit, goals);
+        if (routeWithExits(cp, strategy, nb, candidates, cnew, pr, diag)) return;
+        if (!strategy.attachToNewNetwork && !nb.edges().isEmpty()) {
+            // раздельное подключение невозможно без пересечения уже построенных участков → объединяем в общую сеть (ТЗ 2.3)
+            Strategy merged = new Strategy();
+            merged.name = strategy.name; merged.order = strategy.order; merged.excludedTieIns = strategy.excludedTieIns; merged.attachToNewNetwork = true;
+            diag.info("ROUTE_MERGE", "Точка " + cp.id + ": отдельная трасса пересекала бы уже построенную сеть — точка присоединена к новой сети", cp.id);
+            if (routeWithExits(cp, merged, nb, candidates, cnew, pr, diag)) return;
+        }
+        pr.connected = false;
+        pr.reason = "маршрут не найден (перебрано выходов: " + candidates.size() + ")";
+        diag.warn("ROUTE_NOT_FOUND", "Точка " + cp.id + ": " + pr.reason, cp.id);
+    }
+
+    private boolean routeWithExits(ConnectionPoint cp, Strategy strategy, NetworkBuilder nb, List<ExitFinder.Exit> candidates, double cnew, PointResult pr, Diagnostics diag) {
+        double radius = rr.candidateRadiusM;
+        while (radius <= rr.candidateRadiusMaxM) {
+            Envelope env = new Envelope(cp.geom.getCoordinate());
+            env.expandBy(radius);
+            List<RasterWindow.Goal> goals = collectGoals(cp, strategy, nb, env);
+            if (goals.isEmpty()) { radius *= 2; continue; }
+            Envelope win = new Envelope(cp.geom.getCoordinate());
+            for (ExitFinder.Exit e : candidates) win.expandToInclude(e.exitPoint);
+            for (RasterWindow.Goal g : goals) win.expandToInclude(g.geom.getEnvelopeInternal());
+            win.expandBy(rr.windowMarginM);
+            RasterWindow w = buildWindow(win, goals);
+            boolean[] base = w.blocked.clone();
+            int tried = 0;
+            for (ExitFinder.Exit exit : candidates) {
+                tried++;
+                System.arraycopy(base, 0, w.blocked, 0, base.length);
+                if (exit.building != null) w.unblock(ExitFinder.corridorGeom(exit, rr.gridStepM * 0.75));
+                Coordinate start = exit.exitPoint;
                 int sc = w.col(start.x), sr = w.row(start.y);
-                if (!w.inside(sc, sr)) break;
+                if (!w.inside(sc, sr)) continue;
                 int startCell = w.idx(sc, sr);
-                if (w.blocked[startCell]) w.blocked[startCell] = false;
+                w.blocked[startCell] = false;
+                if (!w.reachable(startCell)) {
+                    diag.info("ROUTE_RETRY", "Точка " + cp.id + ": выход №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) ведёт в замкнутый карман — пропущен", cp.id);
+                    continue;
+                }
                 AStarRouter router = new AStarRouter(w, cnew, rr.turnPenaltyM);
                 AStarRouter.Result res = router.route(startCell, exit.direction);
                 if (res == null) {
-                    // из этого выхода пути нет (двор, тупик) — пробуем следующий выход, не расширяя окно
-                    diag.info("ROUTE_RETRY", "Точка " + cp.id + ": из выхода №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", направление " + exit.direction * 45 + "°) в окне " + w.cols + "×" + w.rows + " пути нет", cp.id);
-                    if (res == null && tried < candidates.size()) break;
-                    radius *= 2;
+                    diag.info("ROUTE_RETRY", "Точка " + cp.id + ": из выхода №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) в окне " + w.cols + "×" + w.rows + " пути нет с учётом правил пересечений", cp.id);
                     continue;
                 }
                 if (exit.relaxed) diag.warn("EXIT_NEAR_NEIGHBOUR", "Точка " + cp.id + ": выход из здания " + exit.building.id + " проходит ближе нормативного отступа к соседнему зданию — свободного коридора нет", cp.id);
@@ -151,12 +172,11 @@ public class RoutePlanner {
                 pr.expanded = res.expanded;
                 pr.routeCost = res.cost;
                 commit(cp, exit, w, res, nb, pr, diag);
-                return;
+                return true;
             }
+            radius *= 2;
         }
-        pr.connected = false;
-        pr.reason = "маршрут не найден (перебрано выходов: " + tried + ")";
-        diag.warn("ROUTE_NOT_FOUND", "Точка " + cp.id + ": " + pr.reason, cp.id);
+        return false;
     }
 
     /** Кандидаты врезки/присоединения с терминальной стоимостью (ТП §8.2). */
@@ -197,13 +217,13 @@ public class RoutePlanner {
                 if (!env.contains(n.xy)) continue;
                 if (n.kind == NodeKind.CHAMBER && n.degree() < ref.chambers.maxBranches) {
                     RasterWindow.Goal g = new RasterWindow.Goal();
-                    g.kind = "new_chamber"; g.objectId = n.id; g.geom = GeoUtil.point(n.xy); g.terminalCost = 0; g.terminalOnly = true;
+                    g.kind = "new_chamber"; g.objectId = n.id; g.geom = GeoUtil.point(n.xy); g.terminalCost = strategy.attachPenalty; g.terminalOnly = true;
                     goals.add(g);
                 }
                 if (n.kind == NodeKind.TIE_IN && n.degree() < ref.chambers.maxBranches && n.existingObjectType != null) {
                     // врезка-камера: можно подсадить ещё ветку (новая камера в точке врезки уже есть)
                     RasterWindow.Goal g = new RasterWindow.Goal();
-                    g.kind = "new_chamber"; g.objectId = n.id; g.geom = GeoUtil.point(n.xy); g.terminalCost = 0; g.terminalOnly = true;
+                    g.kind = "new_chamber"; g.objectId = n.id; g.geom = GeoUtil.point(n.xy); g.terminalCost = strategy.attachPenalty; g.terminalOnly = true;
                     goals.add(g);
                 }
             }
@@ -215,7 +235,7 @@ public class RoutePlanner {
                 RasterWindow.Goal g = new RasterWindow.Goal();
                 g.kind = "new_segment"; g.objectId = e.id;
                 g.geom = ls.getLength() > 3 * rr.gridStepM ? GeoUtil.substring(ls, rr.gridStepM / ls.getLength(), 1 - rr.gridStepM / ls.getLength()) : ls;
-                g.terminalCost = newChamber;
+                g.terminalCost = newChamber + strategy.attachPenalty;
                 g.terminalOnly = true;
                 goals.add(g);
             }
@@ -242,7 +262,7 @@ public class RoutePlanner {
         return n == null ? 0 : n.degree();
     }
 
-    private RasterWindow buildWindow(Envelope env, ExitFinder.Exit exit, List<RasterWindow.Goal> goals) {
+    private RasterWindow buildWindow(Envelope env, List<RasterWindow.Goal> goals) {
         RasterWindow w = new RasterWindow(env, rr.gridStepM);
         double halfWidth = ref.spec(clearanceDn).widthM / 2;
         for (ObstacleField.Obstacle o : field.query(env)) {
@@ -254,8 +274,6 @@ public class RoutePlanner {
                 w.addZone(z);
             }
         }
-        // коридор выхода из своего здания разрешён
-        if (exit.building != null) w.unblock(ExitFinder.corridorGeom(exit, rr.gridStepM * 0.75));
         for (RasterWindow.Goal g : goals) w.addGoal(g, halfWidth);
         // цели не должны быть заблокированы буфером существующей сети
         for (int i = 0; i < w.cells(); i++) if (w.goalKind[i] > 0) w.blocked[i] = false;

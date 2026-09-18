@@ -18,7 +18,7 @@ docker-compose 1.29.2. Полностью офлайн, без UI.
 
 ```bash
 docker-compose up --build -d
-# Swagger UI:  http://localhost:8080/swagger-ui.html
+# Swagger UI:  http://localhost:8080/swagger-ui.html   (OpenAPI JSON: /v3/api-docs)
 ```
 
 Синхронный расчёт (файл → выходной GeoJSON одним запросом):

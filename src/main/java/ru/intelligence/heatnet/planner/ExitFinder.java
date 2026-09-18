@@ -7,6 +7,11 @@ import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.operation.distance.DistanceOp;
+import org.locationtech.jts.geom.prep.PreparedGeometry;
+import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
+import org.locationtech.jts.operation.distance.IndexedFacetDistance;
+import java.util.HashSet;
+import java.util.Set;
 import ru.intelligence.heatnet.geo.GeoUtil;
 import ru.intelligence.heatnet.model.InputModel;
 import ru.intelligence.heatnet.routing.ObstacleField;
@@ -86,6 +91,9 @@ public class ExitFinder {
             }
         }
         cands.sort(Comparator.comparingDouble(a -> a[0]));
+        PreparedGeometry hostPrep = new PreparedGeometryFactory().create(host.geom);
+        IndexedFacetDistance hostDist = new IndexedFacetDistance(host.geom);
+        Set<Integer> triedDirs = new HashSet<>();
         // проход 1: строгий — коридор не задевает чужие буферы; проход 2: коридор может пройти через буфер
         // соседнего здания (но не через само здание) — с предупреждением в диагностике
         for (int pass = 0; pass < 2; pass++) {
@@ -93,6 +101,7 @@ public class ExitFinder {
                 int base = (int) Math.round(cand[1] / 45.0) % 8;
                 for (int delta : new int[]{0, 1, -1}) {
                     int dir = ((base + delta) % 8 + 8) % 8;
+                    if (!triedDirs.add(pass * 8 + dir)) continue;
                     double db = dir * 45.0;
                     double dx = Math.cos(Math.toRadians(db)), dy = Math.sin(Math.toRadians(db));
                     double maxLen = cand[0] + clearance + 30 * step + host.geom.getEnvelopeInternal().maxExtent();
@@ -101,9 +110,10 @@ public class ExitFinder {
                     for (double t = step / 2; t <= maxLen; t += step / 2) {
                         Coordinate q = new Coordinate(c.x + dx * t, c.y + dy * t);
                         Point qp = GeoUtil.point(q);
-                        if (!leftHost && !host.geom.covers(qp)) leftHost = true;
-                        if (leftHost && host.geom.covers(qp)) { exitPt = null; break; }   // луч снова вошёл в здание (невыпуклое)
-                        if (host.geom.distance(qp) >= clearance - 1e-6 && !field.isBlocked(q, host.id)) { exitPt = q; break; }
+                        boolean inside = hostPrep.covers(qp);
+                        if (!leftHost && !inside) leftHost = true;
+                        if (leftHost && inside) { exitPt = null; break; }   // луч снова вошёл в здание (невыпуклое)
+                        if (!inside && hostDist.distance(qp) >= clearance - 1e-6 && !field.isBlocked(q, host.id)) { exitPt = q; break; }
                     }
                     if (exitPt == null) continue;
                     LineString ray = GeoUtil.line(c, exitPt);
