@@ -82,6 +82,7 @@ public class ReferenceRules {
     public Depth depth = new Depth();
     public Map<String, Utility> existingUtilities = Map.of();
     public double nonstandardAngleCostFactor = 1.5;
+    public Map<String, Double> layingCostFactors = Map.of();
 
     // ---- удобные методы ----
 

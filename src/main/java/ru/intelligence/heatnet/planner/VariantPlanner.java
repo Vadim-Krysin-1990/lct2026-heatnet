@@ -74,6 +74,8 @@ public class VariantPlanner {
             hc.compute(nb, v, diag);
             if (depthMode) new ru.intelligence.heatnet.depth.DepthProfiler(ref, rules.restrictions(), model).apply(v, diag, hc);
             v.computeMillis = System.currentTimeMillis() - ts;
+            int connected = res.size() - v.unconnectedOksIds.size();
+            diag.info("TECH_FEASIBILITY", "Вариант " + v.variantId + ": техническая возможность подключения по технологическим коридорам (наличие трассы с соблюдением ограничений) подтверждена для " + connected + " из " + res.size() + " точек присоединения" + (v.unconnectedOksIds.isEmpty() ? "" : "; требуют ручной проработки: " + v.unconnectedOksIds), null);
             diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
             if (first == null) first = v;
