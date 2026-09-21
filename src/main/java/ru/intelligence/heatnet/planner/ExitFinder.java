@@ -41,11 +41,28 @@ public class ExitFinder {
     private final ObstacleField field;
     private final double clearance;
     private final double step;
+    /** Азимут сетки и шаг направлений: выход из здания идёт вдоль оси сетки, чтобы дальше не появлялись косые изломы. */
+    private final double gridBearingDeg;
+    private final double dirStepDeg;
 
     public ExitFinder(ObstacleField field, double clearanceM, double gridStep) {
+        this(field, clearanceM, gridStep, 0, 45);
+    }
+
+    public ExitFinder(ObstacleField field, double clearanceM, double gridStep, double gridBearingDeg, double dirStepDeg) {
         this.field = field;
         this.clearance = clearanceM;
         this.step = gridStep;
+        this.gridBearingDeg = gridBearingDeg;
+        this.dirStepDeg = dirStepDeg;
+    }
+
+    /** Ближайшее к азимуту направление сетки: индекс 0..7 и сам азимут. */
+    private double[] snap(double bearing) {
+        double rel = ((bearing - gridBearingDeg) % 360 + 360) % 360;
+        double snapped = Math.round(rel / dirStepDeg) * dirStepDeg;
+        int idx = (int) Math.round(snapped / 45.0) % 8;
+        return new double[]{idx, (gridBearingDeg + snapped) % 360};
     }
 
     public Exit find(InputModel.ConnectionPoint cp, List<InputModel.Restriction> buildings) {
@@ -98,11 +115,13 @@ public class ExitFinder {
         // соседнего здания (но не через само здание) — с предупреждением в диагностике
         for (int pass = 0; pass < 2; pass++) {
             for (double[] cand : cands) {
-                int base = (int) Math.round(cand[1] / 45.0) % 8;
-                for (int delta : new int[]{0, 1, -1}) {
+                double[] snapped = snap(cand[1]);
+                int base = (int) snapped[0];
+                int stepIdx = (int) Math.max(1, Math.round(dirStepDeg / 45.0));
+                for (int delta : new int[]{0, stepIdx, -stepIdx}) {
                     int dir = ((base + delta) % 8 + 8) % 8;
                     if (!triedDirs.add(pass * 8 + dir)) continue;
-                    double db = dir * 45.0;
+                    double db = (gridBearingDeg + dir * 45.0) % 360;
                     double dx = Math.cos(Math.toRadians(db)), dy = Math.sin(Math.toRadians(db));
                     double maxLen = cand[0] + clearance + 30 * step + host.geom.getEnvelopeInternal().maxExtent();
                     Coordinate exitPt = null;
@@ -136,8 +155,9 @@ public class ExitFinder {
         if (!found.isEmpty()) return found;
         // выхода нет: точка окружена; вернём ближайшую сторону, маршрут, скорее всего, не будет найден
         double[] cand = cands.isEmpty() ? new double[]{0, 0, c.x, c.y} : cands.get(0);
-        int dir = (int) Math.round(cand[1] / 45.0) % 8;
-        double db = dir * 45.0;
+        double[] snapped = snap(cand[1]);
+        int dir = (int) snapped[0];
+        double db = snapped[1];
         Coordinate exitPt = new Coordinate(c.x + Math.cos(Math.toRadians(db)) * (cand[0] + clearance + step),
                 c.y + Math.sin(Math.toRadians(db)) * (cand[0] + clearance + step));
         ex.exitPoint = exitPt; ex.direction = dir; ex.corridor.add(c); ex.corridor.add(exitPt);

@@ -50,6 +50,14 @@ public class RoutePlanner {
         public double attachPenalty = 0;
         /** Режим с учётом глубины: стоимость профиля пересечений влияет на выбор маршрута. */
         public boolean depthMode = false;
+        /** Разрешённых направлений: 8 (повороты кратны 45°) или 4 (только 90°, как у существующей сети). */
+        public int directions = 8;
+        /** Азимут сетки (град.): трасса идёт параллельно застройке и существующим сетям. */
+        public double gridBearingDeg = 0;
+        /** Штраф за поворот в «метрах стоимости»; больше — длиннее прямые участки. */
+        public Double turnPenaltyM = null;
+        /** Во сколько раз поворот на 45° дороже прямого угла (косой излом требует неподвижных опор). */
+        public double sharpTurnFactor = 1;
         public String description;
     }
 
@@ -100,7 +108,7 @@ public class RoutePlanner {
             case "distance_desc": order.sort(Comparator.comparingDouble((ConnectionPoint c) -> -distToNet.get(c.id))); break;
             default: order.sort(Comparator.comparingDouble(c -> distToNet.get(c.id)));
         }
-        ExitFinder exits = new ExitFinder(field, clearance, rr.gridStepM);
+        ExitFinder exits = new ExitFinder(field, clearance, rr.gridStepM, strategy.gridBearingDeg, strategy.directions <= 4 ? 90 : 45);
         List<PointResult> results = new ArrayList<>();
         for (ConnectionPoint cp : order) {
             long t0 = System.currentTimeMillis();
@@ -130,6 +138,7 @@ public class RoutePlanner {
             // раздельное подключение невозможно без пересечения уже построенных участков → объединяем в общую сеть (ТЗ 2.3)
             Strategy merged = new Strategy();
             merged.name = strategy.name; merged.order = strategy.order; merged.excludedTieIns = strategy.excludedTieIns; merged.attachToNewNetwork = true; merged.depthMode = strategy.depthMode; merged.attachPenalty = strategy.attachPenalty;
+            merged.directions = strategy.directions; merged.gridBearingDeg = strategy.gridBearingDeg; merged.turnPenaltyM = strategy.turnPenaltyM; merged.sharpTurnFactor = strategy.sharpTurnFactor;
             diag.info("ROUTE_MERGE", "Точка " + cp.id + ": отдельная трасса пересекала бы уже построенную сеть — точка присоединена к новой сети", cp.id);
             if (routeWithExits(cp, merged, nb, candidates, cnew, pr, diag)) return;
         }
@@ -139,6 +148,16 @@ public class RoutePlanner {
     }
 
     private boolean routeWithExits(ConnectionPoint cp, Strategy strategy, NetworkBuilder nb, List<ExitFinder.Exit> candidates, double cnew, PointResult pr, Diagnostics diag) {
+        if (routeWithExits(cp, strategy, nb, candidates, cnew, pr, diag, strategy.directions)) return true;
+        if (strategy.directions <= 4) {
+            diag.info("ROUTE_DIAGONAL_FALLBACK", "Точка " + cp.id + ": ортогональный ход не найден, участок построен с поворотами 45°", cp.id);
+            return routeWithExits(cp, strategy, nb, candidates, cnew, pr, diag, 8);
+        }
+        return false;
+    }
+
+    private boolean routeWithExits(ConnectionPoint cp, Strategy strategy, NetworkBuilder nb, List<ExitFinder.Exit> candidates, double cnew, PointResult pr, Diagnostics diag, int directions) {
+        double turnPenalty = strategy.turnPenaltyM != null ? strategy.turnPenaltyM : rr.turnPenaltyM;
         double radius = rr.candidateRadiusM;
         while (radius <= rr.candidateRadiusMaxM) {
             Envelope env = new Envelope(cp.geom.getCoordinate());
@@ -150,6 +169,7 @@ public class RoutePlanner {
             for (RasterWindow.Goal g : goals) win.expandToInclude(g.geom.getEnvelopeInternal());
             win.expandBy(rr.windowMarginM);
             RasterWindow w = buildWindow(win, goals, strategy, cp);
+            int dirStepIdx = directions <= 4 ? 2 : 1;
             boolean[] base = w.blocked.clone();
             int tried = 0;
             for (ExitFinder.Exit exit : candidates) {
@@ -157,7 +177,8 @@ public class RoutePlanner {
                 System.arraycopy(base, 0, w.blocked, 0, base.length);
                 if (exit.building != null) w.unblock(ExitFinder.corridorGeom(exit, rr.gridStepM * 0.75));
                 Coordinate start = exit.exitPoint;
-                int sc = w.col(start.x), sr = w.row(start.y);
+                if (exit.direction >= 0 && exit.direction % dirStepIdx != 0) continue;   // выход не по оси сетки
+                int sc = w.colOf(start.x, start.y), sr = w.rowOf(start.x, start.y);
                 if (!w.inside(sc, sr)) continue;
                 int startCell = w.idx(sc, sr);
                 w.blocked[startCell] = false;
@@ -165,7 +186,7 @@ public class RoutePlanner {
                     diag.info("ROUTE_RETRY", "Точка " + cp.id + ": выход №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) ведёт в замкнутый карман — пропущен", cp.id);
                     continue;
                 }
-                AStarRouter router = new AStarRouter(w, cnew, rr.turnPenaltyM);
+                AStarRouter router = new AStarRouter(w, cnew, turnPenalty, directions, strategy.sharpTurnFactor);
                 AStarRouter.Result res = router.route(startCell, exit.direction);
                 if (res == null) {
                     diag.info("ROUTE_RETRY", "Точка " + cp.id + ": из выхода №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) в окне " + w.cols + "×" + w.rows + " пути нет с учётом правил пересечений", cp.id);
@@ -267,7 +288,7 @@ public class RoutePlanner {
     }
 
     private RasterWindow buildWindow(Envelope env, List<RasterWindow.Goal> goals, Strategy strategy, ConnectionPoint cp) {
-        RasterWindow w = new RasterWindow(env, rr.gridStepM);
+        RasterWindow w = new RasterWindow(env, rr.gridStepM, strategy.gridBearingDeg);
         double halfWidth = ref.spec(clearanceDn).widthM / 2;
         for (ObstacleField.Obstacle o : field.query(env)) {
             if (o.getBlocked() != null) w.block(o.getBlocked(), o.envelope);
@@ -452,7 +473,7 @@ public class RoutePlanner {
     }
 
     private static short zoneAt(RasterWindow w, Coordinate q) {
-        int c = w.col(q.x), r = w.row(q.y);
+        int c = w.colOf(q.x, q.y), r = w.rowOf(q.x, q.y);
         if (!w.inside(c, r)) return 0;
         return w.zone[w.idx(c, r)];
     }

@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -63,6 +64,21 @@ public class ProcessController {
                 .header("X-Diagnostics-Warnings", String.valueOf(r.model.diagnostics.count(ru.intelligence.heatnet.model.Diagnostics.Level.WARNING)))
                 .contentType(MediaType.parseMediaType("application/geo+json"))
                 .body(body);
+    }
+
+    @Operation(summary = "Подсказка по использованию расчёта",
+            description = "Расчёт выполняется методом POST с файлом; GET отвечает короткой инструкцией, чтобы ссылка, открытая в браузере, не приводила к странице ошибки.")
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> usage() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("service", "heatnet — сервис моделирования трасс подключения к тепловым сетям");
+        m.put("method", "POST /api/process — форма multipart/form-data, поле file: входной GeoJSON");
+        m.put("example", "curl -F \"file=@contest_dataset.geojson\" http://<host>/api/process -o result.geojson");
+        m.put("depth_mode", "POST /api/process?depth=true — дополнительная задача: трассировка с учётом глубины");
+        m.put("large_files", "POST /api/jobs — очередь для файлов до 3 ГБ, затем GET /api/jobs/{id}/result");
+        m.put("docs", "/swagger-ui.html");
+        m.put("rules", "/api/rules/reference, /api/rules/restrictions, /api/rules/routing");
+        return m;
     }
 
     /** 422 с телом-диагностикой. */

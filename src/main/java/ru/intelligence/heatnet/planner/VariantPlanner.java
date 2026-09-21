@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.intelligence.heatnet.config.ReferenceRules;
 import ru.intelligence.heatnet.config.RulesService;
+import ru.intelligence.heatnet.geo.GeoUtil;
 import ru.intelligence.heatnet.hydraulics.HydraulicsCalculator;
 import ru.intelligence.heatnet.model.Diagnostics;
 import ru.intelligence.heatnet.model.InputModel;
@@ -48,6 +49,9 @@ public class VariantPlanner {
         int clearanceDn = ref.diameterForFlow(model.totalNewFlow()).dn;
         ObstacleField field = new ObstacleField(model, rules.restrictions(), ref, rules.routing(), clearanceDn);
         diag.stats.put("clearance_dn", clearanceDn);
+        double gridBearing = rules.routing().gridBearingDeg != null ? rules.routing().gridBearingDeg : dominantBearing(model);
+        diag.info("GRID_BEARING", "Азимут сетки трассировки: " + GeoUtil.round(gridBearing, 1) + "° — преобладающее направление существующей сети и застройки; инженерные варианты строятся вдоль него с поворотами 90°", null);
+        diag.stats.put("grid_bearing_deg", GeoUtil.round(gridBearing, 1));
 
         List<Variant> all = new ArrayList<>();
         int idx = 0;
@@ -56,6 +60,7 @@ public class VariantPlanner {
             RoutePlanner.Strategy st = strategy(name, first, topo);
             if (st == null) continue;
             st.depthMode = depthMode;
+            if (st.gridBearingDeg < 0) st.gridBearingDeg = gridBearing;
             idx++;
             long ts = System.currentTimeMillis();
             Variant v = new Variant();
@@ -76,6 +81,10 @@ public class VariantPlanner {
             v.computeMillis = System.currentTimeMillis() - ts;
             int connected = res.size() - v.unconnectedOksIds.size();
             diag.info("TECH_FEASIBILITY", "Вариант " + v.variantId + ": техническая возможность подключения по технологическим коридорам (наличие трассы с соблюдением ограничений) подтверждена для " + connected + " из " + res.size() + " точек присоединения" + (v.unconnectedOksIds.isEmpty() ? "" : "; требуют ручной проработки: " + v.unconnectedOksIds), null);
+            double[] q = quality(v);
+            v.turnsPerKm = q[0]; v.medianStraightM = q[1]; v.sharpTurns = (int) q[2];
+            diag.info("TRACE_QUALITY", "Вариант " + v.variantId + " (" + st.name + "): " + GeoUtil.round(q[0], 1)
+                    + " поворотов на км, медиана прямого участка " + GeoUtil.round(q[1], 1) + " м, поворотов 45° (внутренний угол 135°, требуют неподвижных опор): " + (int) q[2], null);
             diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
             if (first == null) first = v;
@@ -88,13 +97,33 @@ public class VariantPlanner {
             if (dup) { diag.info("VARIANT_DUPLICATE", "Вариант " + v.variantId + " (" + v.strategy + ") не отличается содержательно от уже включённого — отброшен", null); continue; }
             distinct.add(v);
         }
-        distinct.sort(Comparator.comparingDouble(v -> v.score));
+        // отбор: ТП §2.8 разрешает предложить до трёх вариантов, какие именно — решает сервис.
+        // В выдачу обязательно попадают инженерные (ортогональные) трассировки: у них качество геометрии
+        // ближе к практике проектирования — длинные прямые участки и повороты 90°. Остальные места
+        // занимают лучшие по показателю S. Порядок (rank) назначается строго по S, как требует ТП §9.
         int max = rules.routing().maxVariants;
+        List<Variant> selected = new ArrayList<>();
+        for (Variant v : distinct) {
+            if (selected.size() >= Math.min(max, rules.routing().orthogonalVariantsInOutput)) break;
+            if (v.strategy != null && v.strategy.startsWith("orthogonal") && v.unconnectedOksIds.isEmpty()) selected.add(v);
+        }
+        List<Variant> rest = new ArrayList<>(distinct);
+        rest.removeAll(selected);
+        rest.sort(Comparator.comparingDouble(v -> v.score));
+        for (Variant v : rest) {
+            if (selected.size() >= max) break;
+            selected.add(v);
+        }
+        for (Variant v : distinct) {
+            if (!selected.contains(v)) diag.info("VARIANT_NOT_OFFERED", "Вариант " + v.variantId + " (" + v.strategy + ", S=" + GeoUtil.round(v.score, 3)
+                    + ", " + GeoUtil.round(v.turnsPerKm, 1) + " поворотов на км, косых изломов " + v.sharpTurns
+                    + ") рассчитан как контрольный и в выдачу не включён: геометрия с косыми изломами уступает инженерным вариантам", null);
+        }
+        selected.sort(Comparator.comparingDouble(v -> v.score));
         Outcome out = new Outcome();
         out.topology = topo;
         int rank = 0;
-        for (Variant v : distinct) {
-            if (rank >= max) break;
+        for (Variant v : selected) {
             v.rank = ++rank;
             v.variantId = String.valueOf(rank);
             renumber(v);
@@ -111,6 +140,42 @@ public class VariantPlanner {
         RoutePlanner.Strategy s = new RoutePlanner.Strategy();
         s.name = name;
         switch (name) {
+            case "orthogonal_city": {
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
+                s.sharpTurnFactor = rules.routing().sharpTurnFactor;
+                s.directions = 8;
+                s.gridBearingDeg = -1;   // будет заменён азимутом застройки
+                s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
+                s.description = "Инженерная трассировка вдоль застройки: сетка развёрнута по преобладающему направлению существующей сети, повороты прямые (самокомпенсация), косые изломы исключены; подключение ближних точек собственными врезками, чтобы не перегружать существующую сеть";
+                break;
+            }
+            case "orthogonal_alt_tie_in": {
+                if (first == null) return null;
+                s.attachToNewNetwork = true; s.order = "flow_desc";
+                s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
+                s.sharpTurnFactor = rules.routing().sharpTurnFactor;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                double r0 = rules.routing().altTieInExclusionRadiusM;
+                java.util.Set<String> ex0 = new java.util.HashSet<>();
+                for (Variant.TieIn t : first.tieIns) {
+                    for (InputModel.ExistingChamber ch : topo.chambers()) if (ch.geom.distance(t.geom) <= r0) ex0.add(ch.id);
+                    for (InputModel.ExistingSegment seg : topo.segments()) if (seg.geom.distance(t.geom) <= r0) ex0.add(seg.id);
+                }
+                s.excludedTieIns.addAll(ex0);
+                s.description = "Инженерная трассировка с общим стволом: та же геометрия вдоль застройки, ствол строится от крупных потребителей, точки врезки отличаются от первого варианта";
+                break;
+            }
+            case "orthogonal_shared": {
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
+                s.sharpTurnFactor = rules.routing().sharpTurnFactor;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.description = "Инженерная трассировка общей сетью: геометрия вдоль застройки, точки объединяются в одно дерево с ветвлениями в камерах — меньше врезок в существующую сеть";
+                break;
+            }
             case "shared_tree":
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.description = "Общая сеть: ближние к существующей сети точки образуют ствол, остальные присоединяются к новой сети через камеры";
@@ -152,6 +217,55 @@ public class VariantPlanner {
     }
 
     private ReferenceRules ref() { return rules.reference(); }
+
+    /**
+     * Преобладающее направление существующей сети (и вместе с ней застройки), градусы 0..90.
+     * Круговое среднее по учетверённому углу: у ортогональной сетки направления b и b+90° равнозначны.
+     */
+    static double dominantBearing(InputModel model) {
+        double sx = 0, sy = 0;
+        for (InputModel.ExistingSegment s : model.segments) {
+            org.locationtech.jts.geom.Coordinate[] cs = s.geom.getCoordinates();
+            for (int i = 1; i < cs.length; i++) {
+                double len = cs[i - 1].distance(cs[i]);
+                if (len < 1e-6) continue;
+                double b = Math.toRadians(GeoUtil.bearingDeg(cs[i - 1], cs[i]));
+                sx += len * Math.cos(4 * b);
+                sy += len * Math.sin(4 * b);
+            }
+        }
+        if (sx == 0 && sy == 0) return 0;
+        double a = Math.toDegrees(Math.atan2(sy, sx)) / 4.0;
+        return ((a % 90) + 90) % 90;
+    }
+
+    /** Метрики качества трассы: поворотов на км, медиана прямого участка, число поворотов на 45°. */
+    static double[] quality(Variant v) {
+        java.util.List<Double> straights = new java.util.ArrayList<>();
+        int turns = 0, sharp = 0;
+        double total = 0;
+        for (Variant.NewSegment s : v.segments) {
+            org.locationtech.jts.geom.Coordinate[] cs = s.geom.getCoordinates();
+            double run = 0;
+            for (int i = 1; i < cs.length; i++) {
+                double len = cs[i - 1].distance(cs[i]);
+                total += len; run += len;
+                if (i + 1 < cs.length) {
+                    double d = GeoUtil.acuteAngleDeg(GeoUtil.bearingDeg(cs[i - 1], cs[i]), GeoUtil.bearingDeg(cs[i], cs[i + 1]));
+                    if (d > 1) {
+                        turns++;
+                        if (d < 60) sharp++;      // поворот на 45°: внутренний угол 135° — самокомпенсации не даёт
+                        straights.add(run); run = 0;
+                    }
+                }
+            }
+            if (run > 0) straights.add(run);
+        }
+        java.util.Collections.sort(straights);
+        double median = straights.isEmpty() ? 0 : straights.get(straights.size() / 2);
+        double perKm = total > 0 ? turns / (total / 1000.0) : 0;
+        return new double[]{perKm, median, sharp};
+    }
 
     private static boolean similar(Variant a, Variant b) {
         Set<String> ta = new HashSet<>(), tb = new HashSet<>();

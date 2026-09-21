@@ -20,13 +20,13 @@ public final class PathSimplifier {
         for (int i = 0; i < cells.size(); i++) {
             int cell = cells.get(i);
             int c = cell % w.cols, r = cell / w.cols;
-            if (i == 0) { pts.add(new Coordinate(w.x(c), w.y(r))); continue; }
+            if (i == 0) { pts.add(new Coordinate(w.wx(c, r), w.wy(c, r))); continue; }
             int pc = cells.get(i - 1) % w.cols, pr = cells.get(i - 1) / w.cols;
             int dc = Integer.signum(c - pc), dr = Integer.signum(r - pr);
             if (dc == prevDc && dr == prevDr) {
-                pts.set(pts.size() - 1, new Coordinate(w.x(c), w.y(r)));
+                pts.set(pts.size() - 1, new Coordinate(w.wx(c, r), w.wy(c, r)));
             } else {
-                pts.add(new Coordinate(w.x(c), w.y(r)));
+                pts.add(new Coordinate(w.wx(c, r), w.wy(c, r)));
             }
             prevDc = dc; prevDr = dr;
         }
@@ -37,14 +37,14 @@ public final class PathSimplifier {
             changed = false;
             for (int i = 0; i + 2 < pts.size(); i++) {
                 Coordinate a = pts.get(i), b = pts.get(i + 1), c = pts.get(i + 2);
-                if (b.distance(c) <= 3 * w.step + 1e-9 && isStandardDirection(a, c, w.step) && lineFree(w, a, c)) {
+                if (b.distance(c) <= 3 * w.step + 1e-9 && isStandardDirection(w, a, c) && lineFree(w, a, c)) {
                     pts.remove(i + 1);
                     changed = true;
                     break;
                 }
                 if (a.distance(b) <= 3 * w.step + 1e-9 && i > 0) {
                     Coordinate p = pts.get(i - 1);
-                    if (isStandardDirection(p, b, w.step) && lineFree(w, p, b)) {
+                    if (isStandardDirection(w, p, b) && lineFree(w, p, b)) {
                         pts.remove(i);
                         changed = true;
                         break;
@@ -55,16 +55,18 @@ public final class PathSimplifier {
         return pts;
     }
 
-    /** Направление a→c кратно 45° (с точностью сетки). */
-    static boolean isStandardDirection(Coordinate a, Coordinate c, double step) {
-        double dx = Math.round((c.x - a.x) / step), dy = Math.round((c.y - a.y) / step);
-        if (dx == 0 && dy == 0) return false;
-        return dx == 0 || dy == 0 || Math.abs(dx) == Math.abs(dy);
+    /** Направление a→c кратно 45° в системе сетки (с точностью шага). */
+    static boolean isStandardDirection(RasterWindow w, Coordinate a, Coordinate c) {
+        double du = w.colOf(c.x, c.y) - w.colOf(a.x, a.y);
+        double dv = w.rowOf(c.x, c.y) - w.rowOf(a.x, a.y);
+        if (du == 0 && dv == 0) return false;
+        return du == 0 || dv == 0 || Math.abs(du) == Math.abs(dv);
     }
 
     /** Все клетки на отрезке свободны и не заходят в спецзоны иначе, чем прямо. */
     static boolean lineFree(RasterWindow w, Coordinate a, Coordinate b) {
-        int c0 = w.col(a.x), r0 = w.row(a.y), c1 = w.col(b.x), r1 = w.row(b.y);
+        int c0 = w.colOf(a.x, a.y), r0 = w.rowOf(a.x, a.y);
+        int c1 = w.colOf(b.x, b.y), r1 = w.rowOf(b.x, b.y);
         int dc = Integer.signum(c1 - c0), dr = Integer.signum(r1 - r0);
         int n = Math.max(Math.abs(c1 - c0), Math.abs(r1 - r0));
         int c = c0, r = r0;

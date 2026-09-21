@@ -106,4 +106,8 @@ public class Variant {
     public double length;
     public double score;
     public long computeMillis;
+    // метрики качества трассы (в выходной GeoJSON не идут, только в диагностику и сравнение вариантов)
+    public double turnsPerKm;
+    public double medianStraightM;
+    public int sharpTurns;
 }

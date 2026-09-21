@@ -34,11 +34,38 @@ public class AStarRouter {
     private final RasterWindow w;
     private final double costPerM;
     private final double turnPenaltyM;
+    /** Шаг перебора направлений: 1 — восемь направлений (повороты кратны 45°), 2 — только четыре (повороты 90°). */
+    private final int dirStep;
+    /**
+     * Во сколько раз поворот на 45° дороже поворота на 90°. Практика проектирования: поворот трассы
+     * на 90–130° работает как самокомпенсация температурных удлинений, а при углах более 130°
+     * (это и есть изменение направления на 45°) требуются неподвижные опоры. Поэтому косой излом
+     * для тепловой сети хуже прямого угла, а не лучше.
+     */
+    private final double sharpTurnFactor;
 
     public AStarRouter(RasterWindow w, double costPerM, double turnPenaltyM) {
+        this(w, costPerM, turnPenaltyM, 8, 1);
+    }
+
+    public AStarRouter(RasterWindow w, double costPerM, double turnPenaltyM, int directions, double sharpTurnFactor) {
         this.w = w;
         this.costPerM = costPerM;
         this.turnPenaltyM = turnPenaltyM;
+        this.dirStep = directions <= 4 ? 2 : 1;
+        this.sharpTurnFactor = sharpTurnFactor;
+    }
+
+    /** Вес поворота: 45° — sharpTurnFactor, 90° — 2, 135° — 3 (как доля базового штрафа). */
+    private double turnWeight(int turn) {
+        if (turn == 0) return 0;
+        if (turn == 1) return sharpTurnFactor;
+        return turn;
+    }
+
+    /** Азимут направления сетки с учётом её поворота. */
+    private double bearingOf(int dir) {
+        return (w.bearingDeg + DIR_BEARING[dir]) % 360;
     }
 
     public Result route(int startCell, int startDir) {
@@ -52,7 +79,7 @@ public class AStarRouter {
         double[] h = heuristic();
         int expanded = 0;
         if (startDir < 0) {
-            for (int d = 0; d < 8; d++) { int s = startCell * 8 + d; g[s] = 0; open.add(new double[]{h[startCell], s, 0, -1}); }
+            for (int d = 0; d < 8; d += dirStep) { int s = startCell * 8 + d; g[s] = 0; open.add(new double[]{h[startCell], s, 0, -1}); }
         } else {
             int s = startCell * 8 + startDir; g[s] = 0; open.add(new double[]{h[startCell], s, 0, -1});
         }
@@ -90,7 +117,7 @@ public class AStarRouter {
                 if (goal.terminalOnly) continue;
             }
             short zHere = w.zone[cell];
-            for (int nd = 0; nd < 8; nd++) {
+            for (int nd = dir % dirStep; nd < 8; nd += dirStep) {
                 int turn = Math.abs(nd - dir); if (turn > 4) turn = 8 - turn;
                 if (turn == 4) continue;
                 if (zHere != 0 && turn != 0) continue;
@@ -108,11 +135,11 @@ public class AStarRouter {
                     RasterWindow.Zone z = w.zones.get(zNext - 1);
                     k = z.k;
                     if (z.axisBearing != null && z.minAngleDeg != null
-                            && GeoUtil.acuteAngleDeg(DIR_BEARING[nd], z.axisBearing) + 1e-6 < z.minAngleDeg) continue;
+                            && GeoUtil.acuteAngleDeg(bearingOf(nd), z.axisBearing) + 1e-6 < z.minAngleDeg) continue;
                     if (zHere != 0 && zHere != zNext) k = Math.max(k, w.zones.get(zHere - 1).k);
                 }
                 double len = (DC[nd] != 0 && DR[nd] != 0) ? w.step * SQRT2 : w.step;
-                double stepCost = len * costPerM * k + turn * turnPenaltyM * costPerM;
+                double stepCost = len * costPerM * k + turnWeight(turn) * turnPenaltyM * costPerM;
                 if (zNext != 0 && zHere == 0 && w.goalKind[ncell] == 0) stepCost += w.zones.get(zNext - 1).entryPenalty;
                 int ns = ncell * 8 + nd;
                 double ng = gc + stepCost;
