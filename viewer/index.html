@@ -77,6 +77,9 @@
   .pill.INFO { color: #0b6b3a; border-color: #0b6b3a55; }
   .pill.WARNING { color: #8a5a00; border-color: #8a5a0055; }
   .pill.ERROR { color: #a11; border-color: #a1111155; }
+  .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
+    padding: 14px 16px; background: var(--accent-soft); max-width: 620px; }
+  .notice .muted { margin: 4px 0 10px; }
   #app { display: grid; grid-template-columns: 384px 1fr; height: 100%; min-height: 0; }
   #panel { overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
   .brandbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px 12px;
@@ -748,8 +751,31 @@
     const o = Object.assign({ headers: {} }, opts || {});
     if (token) o.headers['Authorization'] = 'Bearer ' + token;
     const r = await fetch(API + path, o);
-    if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+    if (!r.ok) {
+      const err = new Error(r.status + ' ' + r.statusText);
+      err.status = r.status;
+      throw err;
+    }
     return r.json();
+  }
+  /** Сообщение вместо данных: 401 — нужен вход, 403 — не хватает роли, остальное — сервис недоступен. */
+  function accessNotice(e, what) {
+    if (e.status === 401) {
+      return `<div class="notice"><b>${what} доступен после входа.</b>
+        <div class="muted">Сервис работает с единым входом: откройте доступ учётной записью Keycloak.</div>
+        <button type="button" class="loginHere">Войти</button></div>`;
+    }
+    if (e.status === 403) {
+      return `<div class="notice"><b>Недостаточно прав.</b>
+        <div class="muted">${what} доступен ролям heatnet-viewer, heatnet-engineer и heatnet-admin.
+        Текущая учётная запись: ${document.getElementById('whoName').textContent}.</div></div>`;
+    }
+    return `<div class="notice"><b>Сервис недоступен: ${e.message}.</b>
+      <div class="muted">Страница открыта без запущенного сервиса — данные карты читаются из файлов,
+      журнал и правила приходят только по API.</div></div>`;
+  }
+  function bindLoginButtons(box) {
+    box.querySelectorAll('.loginHere').forEach(b => b.addEventListener('click', () => login()));
   }
   const logTypes = new Set();
   async function loadLog() {
@@ -760,6 +786,12 @@
     if (t) params.set('type', t);
     if (l) params.set('level', l);
     if (a) params.set('actor', a);
+    if (oidc.enabled && !token) {
+      document.getElementById('logCount').textContent = '';
+      box.innerHTML = accessNotice({ status: 401 }, 'Журнал событий');
+      bindLoginButtons(box);
+      return;
+    }
     box.innerHTML = '<span class="muted">загружаю…</span>';
     try {
       const d = await api('/events?' + params.toString());
@@ -781,7 +813,9 @@
         </tr>`).join('')}
       </table>`;
     } catch (e) {
-      box.innerHTML = '<span class="muted">журнал недоступен: ' + e.message + '. Страница открыта без сервиса?</span>';
+      document.getElementById('logCount').textContent = '';
+      box.innerHTML = accessNotice(e, 'Журнал событий');
+      bindLoginButtons(box);
     }
   }
   document.getElementById('logReload').addEventListener('click', loadLog);
@@ -792,13 +826,19 @@
   document.querySelectorAll('.rbtn').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.rbtn').forEach(x => x.classList.toggle('active', x === b));
     const box = document.getElementById('rulesBox');
+    if (oidc.enabled && !token) {
+      box.innerHTML = accessNotice({ status: 401 }, 'Просмотр правил расчёта');
+      bindLoginButtons(box);
+      return;
+    }
     box.innerHTML = '<span class="muted">загружаю…</span>';
     try {
       const d = await api('/rules/' + b.dataset.rules);
       box.innerHTML = '<pre style="white-space:pre-wrap;font-size:12px">' +
         JSON.stringify(d, null, 2).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</pre>';
     } catch (e) {
-      box.innerHTML = '<span class="muted">правила недоступны: ' + e.message + '</span>';
+      box.innerHTML = accessNotice(e, 'Просмотр правил расчёта');
+      bindLoginButtons(box);
     }
   }));
 
@@ -876,6 +916,8 @@
     } catch (e) {
       showUser({ authenticated: false, username: 'анонимно', roles: [] });
     }
+    // после входа обновляем открытую вкладку, чтобы данные появились без перезагрузки
+    if (document.getElementById('page-log').classList.contains('active')) loadLog();
   })();
 
   // ---------- загрузка файлов ----------

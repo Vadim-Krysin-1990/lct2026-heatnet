@@ -11,7 +11,12 @@
 | `heat_network` | LineString | `id`, `variant_id`, `start_node_id`, `end_node_id`, `flow_tph`, `diameter`, `length` (м, по горизонтальной проекции), `laying_method` (`base`/`special`), `depth_start`, `depth_end` (null в двумерном режиме), `cost` |
 | `heat_chamber` | Point | `id`, `variant_id`, `diameter` (наибольший ДУ примыкающих участков), `cost` |
 | `technical_node` | Point | `id`, `variant_id` |
-| `variant_summary` | null | `id`, `variant_id`, `rank`, `construction_cost`, `chamber_construction_cost`, `existing_chamber_tie_in_count`, `existing_chamber_tie_in_cost`, `unconnected_penalty`, `calculated_cost`, `new_network_length`, `score`, `unconnected_oks_ids` |
+| `variant_summary` | null | `id`, `variant_id`, `rank`, `variant_name`, `variant_description`, `construction_cost`, `chamber_construction_cost`, `existing_chamber_tie_in_count`, `existing_chamber_tie_in_cost`, `unconnected_penalty`, `calculated_cost`, `new_network_length`, `score`, `unconnected_oks_ids` |
+
+`variant_name` и `variant_description` — дополнительные атрибуты сверх обязательного состава: словами
+поясняют, чем этот вариант отличается от других («Инженерный: общая сеть, минимум врезок»,
+«Кратчайший: спрямление, общая сеть»). Раздел 7 допускает дополнительные свойства, при проверке
+обязательной части они игнорируются.
 
 Отдельных объектов места присоединения, реконструкции сети и реконструкции камер в выходных данных нет:
 присоединение выполняется через тепловую камеру, а реконструкция в расчётной модели не выполняется.
@@ -29,6 +34,13 @@
   `construction_cost` = участки + новые камеры + врезки в существующие камеры.
 - `score` = 0,7 · (`calculated_cost` / 25 000 000) + 0,3 · (`new_network_length` / 100).
 
+Число вариантов в файле — до трёх (ТП §2.8). Параметр запроса `variants=N` отдаёт все рассчитанные
+стратегии для сравнения; тогда в диагностике появляется `VARIANTS_EXTENDED` с пояснением.
+
 Диагностика (`GET /api/jobs/{id}/diagnostics`, заголовки `X-Compute-Millis`, `X-Diagnostics-Warnings`
 у `/api/process`): ошибки входа, восстановленные значения, события расчёта (`TRACE_QUALITY`,
-`LENGTH_LIMIT_UPSIZE`, `ROUTE_NOT_FOUND`, `GRID_BEARING`, `VARIANT`, `VARIANT_NOT_OFFERED`) и статистика.
+`CLEARANCE_OK` / `CLEARANCE_TIGHT`, `LENGTH_LIMIT_UPSIZE`, `ROUTE_NOT_FOUND`, `GRID_BEARING`,
+`VARIANT`, `VARIANT_NOT_OFFERED`, `VARIANTS_EXTENDED`) и статистика.
+
+Журнал событий сервиса (кто и когда запускал расчёт, чем закончилось) — отдельный интерфейс
+`GET /api/events`, он не входит в выходной GeoJSON; описание — в README.
