@@ -53,6 +53,13 @@ public class VariantPlanner {
         NetworkTopology topo = new NetworkTopology(model, rules.routing().snapToleranceM);
         // отступ от ОКС — по верхней оценке ДУ новой сети (ДУ для суммарного расхода всех точек)
         int clearanceDn = ref.diameterForFlow(model.totalNewFlow()).dn;
+        // отступ нормируется по фактическому ДУ участка, а он может оказаться выше расчётного по расходу
+        // (предельная длина поднимает ДУ на ступень), поэтому зоны строятся с запасом
+        for (int i = 0; i < rules.routing().clearanceDnHeadroomSteps; i++) {
+            ReferenceRules.DiameterSpec next = ref.nextStep(clearanceDn);
+            if (next == null) break;
+            clearanceDn = next.dn;
+        }
         ObstacleField field = new ObstacleField(model, rules.restrictions(), ref, rules.routing(), clearanceDn);
         diag.stats.put("clearance_dn", clearanceDn);
         double gridBearing = rules.routing().gridBearingDeg != null ? rules.routing().gridBearingDeg : dominantBearing(model);
@@ -88,6 +95,7 @@ public class VariantPlanner {
             v.computeMillis = System.currentTimeMillis() - ts;
             int connected = res.size() - v.unconnectedOksIds.size();
             diag.info("TECH_FEASIBILITY", "Вариант " + v.variantId + ": техническая возможность подключения по технологическим коридорам (наличие трассы с соблюдением ограничений) подтверждена для " + connected + " из " + res.size() + " точек присоединения" + (v.unconnectedOksIds.isEmpty() ? "" : "; требуют ручной проработки: " + v.unconnectedOksIds), null);
+            new ClearanceValidator(model, ref, rules.restrictions(), field).check(v, diag);
             double[] q = quality(v, model);
             v.turnsPerKm = q[0]; v.medianStraightM = q[1]; v.sharpTurns = (int) q[2];
             diag.info("TRACE_QUALITY", "Вариант " + v.variantId + " (" + st.name + "): " + GeoUtil.round(q[0], 1)

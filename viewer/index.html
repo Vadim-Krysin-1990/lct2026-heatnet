@@ -141,6 +141,11 @@
   .compass:active { cursor: grabbing; }
   .compass[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 10px rgba(0,0,0,.18); }
   .compass svg { width: 30px; height: 30px; transform: rotate(var(--rot, 0deg)); }
+  #mapwrap.rotating { cursor: grab; }
+  #mapwrap.rotating:active { cursor: grabbing; }
+  .rothint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 600;
+    background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.2); pointer-events: none; }
   .compass .deg { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
     font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -231,7 +236,7 @@
   <div id="mapwrap">
     <div id="map"></div>
     <button type="button" class="compass" id="compass" aria-pressed="false"
-            title="Компас: тянуть — повернуть карту, клик — вернуть на север">
+            title="Компас: нажмите, чтобы включить режим поворота карты; тяните карту мышью; нажмите ещё раз, чтобы зафиксировать. Двойной клик — вернуть на север">
       <svg viewBox="0 0 40 40" aria-hidden="true">
         <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-opacity=".25"/>
         <polygon points="20,4 25,21 20,17 15,21" fill="#c0392b"/>
@@ -243,6 +248,7 @@
       <button type="button" id="zoomIn" aria-label="Приблизить">+</button>
       <button type="button" id="zoomOut" aria-label="Отдалить">−</button>
     </div>
+    <div class="rothint" id="rotHint" hidden>Поворот карты: тяните карту мышью · нажмите компас, чтобы зафиксировать</div>
     <div class="attrib" id="attrib" hidden>© OpenStreetMap</div>
     <div class="inspect" id="inspect" hidden></div>
   </div>
@@ -390,12 +396,22 @@
     document.documentElement.style.setProperty('--rot', rot.toFixed(2) + 'deg');
     const turned = rot > 0.5 && rot < 359.5;
     document.body.classList.toggle('rotated', turned);
-    compass.setAttribute('aria-pressed', String(turned));
     degEl.textContent = turned ? Math.round(rot) + '°' : 'С';
     // при повороте колесо масштабирует от центра: курсор в повёрнутой системе сбивает привычное поведение
     map.options.scrollWheelZoom = turned ? 'center' : true;
   }
   setRot(0);
+
+  // компас — переключатель режима поворота: включили, покрутили карту мышью, выключили — угол зафиксирован
+  let rotateMode = false;
+  function setRotateMode(on) {
+    rotateMode = on;
+    compass.setAttribute('aria-pressed', String(on));
+    wrap.classList.toggle('rotating', on);
+    document.getElementById('rotHint').hidden = !on;
+  }
+  compass.addEventListener('click', e => { e.preventDefault(); setRotateMode(!rotateMode); });
+  compass.addEventListener('dblclick', e => { e.preventDefault(); setRot(0); });
 
   // экранные координаты → точка полотна с учётом поворота (иначе Leaflet промахивается по объектам)
   const origMousePos = L.DomEvent.getMousePosition;
@@ -413,8 +429,8 @@
   map.dragging.disable();
   let pan = null, spin = null;
   wrap.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || !e.isPrimary || e.target.closest('.compass, .inspect')) return;
-    if (e.shiftKey) { spin = { cx: 0, cy: 0, a0: 0, start: rot }; startSpin(e, wrap); return; }
+    if (e.button !== 0 || !e.isPrimary || e.target.closest('.compass, .inspect, .zoombox')) return;
+    if (rotateMode || e.shiftKey) { spin = { cx: 0, cy: 0, a0: 0, start: rot }; startSpin(e, wrap); return; }
     pan = { x: e.clientX, y: e.clientY };
   });
   function startSpin(e, el) {
@@ -438,17 +454,12 @@
     map.panBy([-(dx * cos - dy * sin), -(dx * sin + dy * cos)], { animate: false });
     pan.x = e.clientX; pan.y = e.clientY;
   });
-  window.addEventListener('pointerup', () => { pan = null; });
-  compass.addEventListener('pointerdown', e => {
-    spin = { start: rot };
-    startSpin(e, compass);
-    compass.setPointerCapture(e.pointerId);
-  });
-  compass.addEventListener('pointerup', () => { const turned = spin && spin.moved; spin = null; if (!turned) setRot(0); });
+  window.addEventListener('pointerup', () => { pan = null; spin = null; });
   compass.addEventListener('keydown', e => {
     if (e.key === 'ArrowLeft') { setRot(rot - 5); e.preventDefault(); }
     if (e.key === 'ArrowRight') { setRot(rot + 5); e.preventDefault(); }
     if (e.key === 'Home') { setRot(0); e.preventDefault(); }
+    if (e.key === 'Escape') { setRotateMode(false); }
   });
 
   const groups = {};        // name -> L.LayerGroup

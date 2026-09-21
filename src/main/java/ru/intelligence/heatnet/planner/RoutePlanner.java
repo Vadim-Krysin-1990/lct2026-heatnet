@@ -240,7 +240,10 @@ public class RoutePlanner {
             if (g.isEmpty()) continue;
             RasterWindow.Goal goal = new RasterWindow.Goal();
             goal.kind = "existing_segment"; goal.objectId = s.id; goal.geom = g;
-            goal.terminalCost = ref.tieIn.cost + newChamber;
+            // присоединение к участку — новая камера, её стоимость уже включает врезку (ТП §2.4, §3.2);
+            // раньше здесь ошибочно прибавлялась ещё и стоимость врезки в камеру, и поиск
+            // систематически предпочитал уход в существующую камеру за 5 млн
+            goal.terminalCost = newChamber;
             goals.add(goal);
         }
         // новая сеть (общее дерево)
