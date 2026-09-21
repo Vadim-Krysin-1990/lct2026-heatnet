@@ -87,6 +87,6 @@ class DepthTest {
         assertEquals(sum + v.chamberConstructionCost + v.existingChamberTieInCost, v.constructionCost, 1.0);
         assertEquals(v.constructionCost + v.unconnectedPenalty, v.calculatedCost, 1.0);
         Files.createDirectories(Paths.get("target"));
-        try (FileOutputStream fos = new FileOutputStream("target/depth_case_result.geojson")) { new GeoJsonWriter(loader.crs()).write(deep.variants, fos); }
+        try (FileOutputStream fos = new FileOutputStream("target/depth_case_result.geojson")) { new GeoJsonWriter(loader.crs(), m.numericIds).write(deep.variants, fos); }
     }
 }

@@ -92,13 +92,15 @@ public class ObstacleField {
             double clearance = rule.clearance(clearanceDn, rules.defaultClearanceM);
             if (!rule.isSpecial()) {
                 Obstacle o = base(r.id, r.type, rule, r.geom);
-                o.clearance = Math.max(0, clearance);
+                // ТП §3.1: расстояние измеряется от границы полигона до внешней границы расчётного
+                // габарита новой сети, поэтому к отступу добавляется половина расчётной ширины пары труб
+                o.clearance = Math.max(0, clearance) + halfWidthNew;
                 o.envelope = expanded(r.geom, o.clearance);
                 add(o);
             } else if (!rule.isLine()) {
                 Obstacle o = base(r.id, r.type, rule, r.geom);
                 o.special = true;
-                o.zoneHalf = Math.max(rule.zoneMarginM, clearance);
+                o.zoneHalf = Math.max(rule.zoneMarginM, clearance + halfWidthNew);
                 o.kSpecial = rule.kSpecial;
                 if (rule.minCrossingAngleDeg != null) {
                     double[] axis = GeoUtil.polygonAxis(r.geom);

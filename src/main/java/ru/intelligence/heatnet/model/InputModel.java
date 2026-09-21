@@ -59,6 +59,8 @@ public class InputModel {
     public final List<Restriction> restrictions = new ArrayList<>();
     /** Полигоны ОКС (object_type oks_future / oks_existing), если переданы отдельно от ограничений. */
     public final List<Restriction> oksPolygons = new ArrayList<>();
+    /** id входных объектов, записанные во входном файле числом: тип идентификатора сохраняется в выходе (ТП §7.2). */
+    public final java.util.Set<String> numericIds = new java.util.HashSet<>();
     public final Diagnostics diagnostics = new Diagnostics();
     public int totalFeatures;
 

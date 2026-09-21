@@ -38,7 +38,7 @@ class LargeFileTest {
         VariantPlanner.Outcome out = new VariantPlanner(rules).plan(m);
         long t2 = System.currentTimeMillis();
         long usedAfterPlan = rt.totalMemory() - rt.freeMemory();
-        try (FileOutputStream fos = new FileOutputStream("target/large_result.geojson")) { new GeoJsonWriter(loader.crs()).write(out.variants, fos); }
+        try (FileOutputStream fos = new FileOutputStream("target/large_result.geojson")) { new GeoJsonWriter(loader.crs(), m.numericIds).write(out.variants, fos); }
         long t3 = System.currentTimeMillis();
         System.out.printf("LARGE: файл %.1f МБ, объектов %d, ограничений %d; загрузка %d мс, расчёт %d мс (вариантов %d), выгрузка %d мс; память после загрузки %d МБ, после расчёта %d МБ, maxHeap %d МБ%n",
                 size / 1e6, m.totalFeatures, m.restrictions.size(), t1 - t0, t2 - t1, out.variants.size(), t3 - t2, usedAfterLoad >> 20, usedAfterPlan >> 20, rt.maxMemory() >> 20);

@@ -53,7 +53,7 @@ public class ProcessController {
         if (r.model.diagnostics.hasErrors()) {
             throw new InputValidationException(JobService.diagnosticsMap(r.model.diagnostics));
         }
-        GeoJsonWriter writer = new GeoJsonWriter(r.loader.crs());
+        GeoJsonWriter writer = new GeoJsonWriter(r.loader.crs(), r.model.numericIds);
         StreamingResponseBody body = out -> writer.write(r.variants, out);
         Map<String, Object> summary = new LinkedHashMap<>();
         return ResponseEntity.ok()

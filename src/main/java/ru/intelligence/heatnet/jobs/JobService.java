@@ -146,7 +146,7 @@ public class JobService {
             VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth);
             Path result = storage.resolve("result").resolve(id + ".geojson");
             try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(result), 1 << 16)) {
-                new GeoJsonWriter(loader.crs()).write(out.variants, os);
+                new GeoJsonWriter(loader.crs(), model.numericIds).write(out.variants, os);
             }
             j.setResultPath(result.toString());
             j.setVariantsCount(out.variants.size());

@@ -69,7 +69,7 @@ class ContestDatasetTest {
         Path target = Paths.get("target");
         Files.createDirectories(target);
         try (FileOutputStream fos = new FileOutputStream(target.resolve("contest_result.geojson").toFile())) {
-            new GeoJsonWriter(loader.crs()).write(out.variants, fos);
+            new GeoJsonWriter(loader.crs(), m.numericIds).write(out.variants, fos);
         }
         Variant best = out.variants.get(0);
         assertEquals(1, best.rank);
@@ -89,7 +89,7 @@ class ContestDatasetTest {
             System.out.printf("Глубина, вариант %s (%s): участков %d, техузлов %d, C=%.0f, L=%.1f, S=%.3f%n", v.variantId, v.strategy, v.segments.size(), v.techNodes.size(), v.calculatedCost, v.newNetworkLength, v.score);
         }
         try (FileOutputStream fos = new FileOutputStream(Paths.get("target").resolve("contest_result_depth.geojson").toFile())) {
-            new GeoJsonWriter(loader.crs()).write(out.variants, fos);
+            new GeoJsonWriter(loader.crs(), m.numericIds).write(out.variants, fos);
         }
     }
 }

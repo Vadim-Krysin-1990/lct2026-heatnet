@@ -46,6 +46,7 @@ public class InputLoader {
                 d.warn("MISSING_ID", "У объекта №" + index + " нет id, присвоен " + id, id);
             }
             if (!ids.add(id)) d.warn("DUPLICATE_ID", "Повторяющийся id " + id + " (тип " + type + ")", id);
+            if (props.get("id") instanceof Number) m.numericIds.add(id);
             if (type == null) {
                 d.error("MISSING_OBJECT_TYPE", "У объекта " + id + " нет object_type — пропущен", id);
                 return;

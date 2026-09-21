@@ -21,9 +21,25 @@ import java.util.List;
 public class GeoJsonWriter {
     private final CrsTransformer crs;
     private final ObjectMapper mapper = new ObjectMapper();
+    /** id входных объектов, которые во входном файле были числами (ТП §7.2: тип идентификатора сохраняется). */
+    private final java.util.Set<String> numericIds;
 
     public GeoJsonWriter(CrsTransformer crs) {
+        this(crs, java.util.Collections.emptySet());
+    }
+
+    public GeoJsonWriter(CrsTransformer crs, java.util.Set<String> numericIds) {
         this.crs = crs;
+        this.numericIds = numericIds == null ? java.util.Collections.emptySet() : numericIds;
+    }
+
+    /** Ссылка на узел: если во входных данных id был числом, пишем числом. */
+    private void writeRef(JsonGenerator g, String field, String id) throws IOException {
+        if (numericIds.contains(id)) {
+            try { g.writeNumberField(field, Long.parseLong(id)); return; } catch (NumberFormatException ignore) { }
+            try { g.writeNumberField(field, Double.parseDouble(id)); return; } catch (NumberFormatException ignore) { }
+        }
+        g.writeStringField(field, id);
     }
 
     public void write(List<Variant> variants, OutputStream out) throws IOException {
@@ -50,8 +66,8 @@ public class GeoJsonWriter {
             g.writeStringField("id", s.id);
             g.writeStringField("object_type", "heat_network");
             g.writeStringField("variant_id", v.variantId);
-            g.writeStringField("start_node_id", s.startNodeId);
-            g.writeStringField("end_node_id", s.endNodeId);
+            writeRef(g, "start_node_id", s.startNodeId);
+            writeRef(g, "end_node_id", s.endNodeId);
             g.writeNumberField("flow_tph", GeoUtil.round(s.flowTph, 3));
             g.writeNumberField("diameter", s.diameter);
             g.writeNumberField("length", GeoUtil.round(s.length, 2));
@@ -95,7 +111,12 @@ public class GeoJsonWriter {
         g.writeNumberField("new_network_length", GeoUtil.round(v.newNetworkLength, 2));
         g.writeNumberField("score", GeoUtil.round(v.score, 4));
         g.writeArrayFieldStart("unconnected_oks_ids");
-        for (String id : v.unconnectedOksIds) g.writeString(id);
+        for (String id : v.unconnectedOksIds) {
+            if (numericIds.contains(id)) {
+                try { g.writeNumber(Long.parseLong(id)); continue; } catch (NumberFormatException ignore) { }
+            }
+            g.writeString(id);
+        }
         g.writeEndArray();
         g.writeEndObject();
         g.writeEndObject();
