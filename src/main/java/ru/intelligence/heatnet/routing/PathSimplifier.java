@@ -13,6 +13,15 @@ public final class PathSimplifier {
     private PathSimplifier() {}
 
     public static List<Coordinate> simplify(RasterWindow w, List<Integer> cells) {
+        return simplify(w, cells, true);
+    }
+
+    /**
+     * @param allowDiagonalCuts разрешено ли срезать угол по диагонали. Для инженерной трассировки
+     *        запрещено: срезка превращает один прямой угол (самокомпенсация) в два косых излома,
+     *        каждый из которых требует неподвижной опоры.
+     */
+    public static List<Coordinate> simplify(RasterWindow w, List<Integer> cells, boolean allowDiagonalCuts) {
         List<Coordinate> pts = new ArrayList<>();
         if (cells.isEmpty()) return pts;
         // 1. коллинеарные шаги
@@ -37,14 +46,14 @@ public final class PathSimplifier {
             changed = false;
             for (int i = 0; i + 2 < pts.size(); i++) {
                 Coordinate a = pts.get(i), b = pts.get(i + 1), c = pts.get(i + 2);
-                if (b.distance(c) <= 3 * w.step + 1e-9 && isStandardDirection(w, a, c) && lineFree(w, a, c)) {
+                if (b.distance(c) <= 3 * w.step + 1e-9 && isStandardDirection(w, a, c, allowDiagonalCuts) && lineFree(w, a, c)) {
                     pts.remove(i + 1);
                     changed = true;
                     break;
                 }
                 if (a.distance(b) <= 3 * w.step + 1e-9 && i > 0) {
                     Coordinate p = pts.get(i - 1);
-                    if (isStandardDirection(w, p, b) && lineFree(w, p, b)) {
+                    if (isStandardDirection(w, p, b, allowDiagonalCuts) && lineFree(w, p, b)) {
                         pts.remove(i);
                         changed = true;
                         break;
@@ -56,11 +65,12 @@ public final class PathSimplifier {
     }
 
     /** Направление a→c кратно 45° в системе сетки (с точностью шага). */
-    static boolean isStandardDirection(RasterWindow w, Coordinate a, Coordinate c) {
+    static boolean isStandardDirection(RasterWindow w, Coordinate a, Coordinate c, boolean allowDiagonal) {
         double du = w.colOf(c.x, c.y) - w.colOf(a.x, a.y);
         double dv = w.rowOf(c.x, c.y) - w.rowOf(a.x, a.y);
         if (du == 0 && dv == 0) return false;
-        return du == 0 || dv == 0 || Math.abs(du) == Math.abs(dv);
+        if (du == 0 || dv == 0) return true;
+        return allowDiagonal && Math.abs(du) == Math.abs(dv);
     }
 
     /** Все клетки на отрезке свободны и не заходят в спецзоны иначе, чем прямо. */

@@ -108,7 +108,10 @@ public class RoutePlanner {
             case "distance_desc": order.sort(Comparator.comparingDouble((ConnectionPoint c) -> -distToNet.get(c.id))); break;
             default: order.sort(Comparator.comparingDouble(c -> distToNet.get(c.id)));
         }
-        ExitFinder exits = new ExitFinder(field, clearance, rr.gridStepM, strategy.gridBearingDeg, strategy.directions <= 4 ? 90 : 45);
+        // в инженерных вариантах выход из здания идёт строго вдоль оси сетки: иначе первый же стык
+        // с магистральным направлением даёт косой излом
+        double exitStep = (strategy.directions <= 4 || strategy.sharpTurnFactor > 1) ? 90 : 45;
+        ExitFinder exits = new ExitFinder(field, clearance, rr.gridStepM, strategy.gridBearingDeg, exitStep);
         List<PointResult> results = new ArrayList<>();
         for (ConnectionPoint cp : order) {
             long t0 = System.currentTimeMillis();
@@ -196,7 +199,7 @@ public class RoutePlanner {
                 if (exit.enclosed) diag.warn("EXIT_ENCLOSED", "Точка " + cp.id + ": здание " + exit.building.id + " окружено, свободного выхода нет", cp.id);
                 pr.expanded = res.expanded;
                 pr.routeCost = res.cost;
-                commit(cp, exit, w, res, nb, pr, diag);
+                commit(cp, exit, w, res, nb, pr, diag, strategy);
                 return true;
             }
             radius *= 2;
@@ -312,8 +315,8 @@ public class RoutePlanner {
     }
 
     /** Переносит найденный путь в строящуюся сеть: узлы, рёбра, разрезы по спецзонам и по целям. */
-    private void commit(ConnectionPoint cp, ExitFinder.Exit exit, RasterWindow w, AStarRouter.Result res, NetworkBuilder nb, PointResult pr, Diagnostics diag) {
-        List<Coordinate> path = PathSimplifier.simplify(w, res.cells);
+    private void commit(ConnectionPoint cp, ExitFinder.Exit exit, RasterWindow w, AStarRouter.Result res, NetworkBuilder nb, PointResult pr, Diagnostics diag, Strategy strategy) {
+        List<Coordinate> path = PathSimplifier.simplify(w, res.cells, strategy.sharpTurnFactor <= 1);
         RasterWindow.Goal goal = w.goals.get(res.goalIndex);
         // точный конец: проекция последней клетки на геометрию цели
         Coordinate last = path.get(path.size() - 1);

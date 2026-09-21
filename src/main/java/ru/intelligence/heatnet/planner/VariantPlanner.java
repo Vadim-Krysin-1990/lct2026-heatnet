@@ -81,10 +81,11 @@ public class VariantPlanner {
             v.computeMillis = System.currentTimeMillis() - ts;
             int connected = res.size() - v.unconnectedOksIds.size();
             diag.info("TECH_FEASIBILITY", "Вариант " + v.variantId + ": техническая возможность подключения по технологическим коридорам (наличие трассы с соблюдением ограничений) подтверждена для " + connected + " из " + res.size() + " точек присоединения" + (v.unconnectedOksIds.isEmpty() ? "" : "; требуют ручной проработки: " + v.unconnectedOksIds), null);
-            double[] q = quality(v);
+            double[] q = quality(v, model);
             v.turnsPerKm = q[0]; v.medianStraightM = q[1]; v.sharpTurns = (int) q[2];
             diag.info("TRACE_QUALITY", "Вариант " + v.variantId + " (" + st.name + "): " + GeoUtil.round(q[0], 1)
-                    + " поворотов на км, медиана прямого участка " + GeoUtil.round(q[1], 1) + " м, поворотов 45° (внутренний угол 135°, требуют неподвижных опор): " + (int) q[2], null);
+                    + " поворотов на км, медиана прямого участка " + GeoUtil.round(q[1], 1) + " м, прямых углов " + (int) q[3]
+                    + ", косых изломов на трассе " + (int) q[2] + " (сверх них " + (int) q[4] + " поворотов на выходе из зданий по нормали к стене — требование заказчика)", null);
             diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
             if (first == null) first = v;
@@ -116,7 +117,7 @@ public class VariantPlanner {
         }
         for (Variant v : distinct) {
             if (!selected.contains(v)) diag.info("VARIANT_NOT_OFFERED", "Вариант " + v.variantId + " (" + v.strategy + ", S=" + GeoUtil.round(v.score, 3)
-                    + ", " + GeoUtil.round(v.turnsPerKm, 1) + " поворотов на км, косых изломов " + v.sharpTurns
+                    + ", " + GeoUtil.round(v.turnsPerKm, 1) + " поворотов на км, косых изломов на трассе " + v.sharpTurns
                     + ") рассчитан как контрольный и в выдачу не включён: геометрия с косыми изломами уступает инженерным вариантам", null);
         }
         selected.sort(Comparator.comparingDouble(v -> v.score));
@@ -239,10 +240,14 @@ public class VariantPlanner {
         return ((a % 90) + 90) % 90;
     }
 
-    /** Метрики качества трассы: поворотов на км, медиана прямого участка, число поворотов на 45°. */
-    static double[] quality(Variant v) {
+    /**
+     * Метрики качества трассы: поворотов на км, медиана прямого участка, косых изломов на трассе,
+     * прямых углов, поворотов на выходе из здания. Выход от точки присоединения идёт по нормали к стене
+     * (требование заказчика), поэтому стык нормали с магистральным направлением дефектом не считается.
+     */
+    static double[] quality(Variant v, InputModel model) {
         java.util.List<Double> straights = new java.util.ArrayList<>();
-        int turns = 0, sharp = 0;
+        int turns = 0, sharp = 0, right = 0, exitTurns = 0;
         double total = 0;
         for (Variant.NewSegment s : v.segments) {
             org.locationtech.jts.geom.Coordinate[] cs = s.geom.getCoordinates();
@@ -254,7 +259,13 @@ public class VariantPlanner {
                     double d = GeoUtil.acuteAngleDeg(GeoUtil.bearingDeg(cs[i - 1], cs[i]), GeoUtil.bearingDeg(cs[i], cs[i + 1]));
                     if (d > 1) {
                         turns++;
-                        if (d < 60) sharp++;      // поворот на 45°: внутренний угол 135° — самокомпенсации не даёт
+                        boolean atExit = false;
+                        for (InputModel.ConnectionPoint p : model.points) {
+                            if (p.geom.getCoordinate().distance(cs[i]) <= 25) { atExit = true; break; }
+                        }
+                        if (d >= 70 && d <= 110) right++;
+                        else if (d >= 15 && atExit) exitTurns++;
+                        else if (d >= 15) sharp++;   // косой излом: внутренний угол 135° — самокомпенсации не даёт
                         straights.add(run); run = 0;
                     }
                 }
@@ -264,7 +275,7 @@ public class VariantPlanner {
         java.util.Collections.sort(straights);
         double median = straights.isEmpty() ? 0 : straights.get(straights.size() / 2);
         double perKm = total > 0 ? turns / (total / 1000.0) : 0;
-        return new double[]{perKm, median, sharp};
+        return new double[]{perKm, median, sharp, right, exitTurns};
     }
 
     private static boolean similar(Variant a, Variant b) {
