@@ -42,6 +42,17 @@ public class SecurityConfig {
     @Value("${heatnet.security.cors-origins:*}")
     private String corsOrigins;
 
+    @Value("${heatnet.security.issuer-uri:}")
+    private String issuerUri;
+
+    /**
+     * Адрес набора ключей внутри сети docker-compose. Нужен потому, что issuer в токене —
+     * внешний адрес стенда (его видит браузер), а контейнер сервиса ходит к Keycloak по имени
+     * сервиса. Ключи берём по внутреннему адресу, издателя проверяем по внешнему.
+     */
+    @Value("${heatnet.security.jwk-set-uri:}")
+    private String jwkSetUri;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf().disable()
@@ -64,6 +75,32 @@ public class SecurityConfig {
                 .and()
                 .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(converter())));
         return http.build();
+    }
+
+    @Bean
+    @org.springframework.context.annotation.Conditional(JwkSetConfigured.class)
+    public org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder() {
+        org.springframework.security.oauth2.jwt.NimbusJwtDecoder decoder =
+                org.springframework.security.oauth2.jwt.NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        java.util.List<org.springframework.security.oauth2.core.OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt>> validators =
+                new ArrayList<>();
+        validators.add(new org.springframework.security.oauth2.jwt.JwtTimestampValidator());
+        if (issuerUri != null && !issuerUri.isEmpty()) {
+            validators.add(new org.springframework.security.oauth2.jwt.JwtIssuerValidator(issuerUri));
+        }
+        decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(validators));
+        log.info("Ключи проверки токенов берутся по {}, издатель проверяется как {}", jwkSetUri, issuerUri);
+        return decoder;
+    }
+
+    /** Свой JwtDecoder создаём только когда задан адрес набора ключей. */
+    public static class JwkSetConfigured implements org.springframework.context.annotation.Condition {
+        @Override
+        public boolean matches(org.springframework.context.annotation.ConditionContext ctx,
+                               org.springframework.core.type.AnnotatedTypeMetadata md) {
+            String v = ctx.getEnvironment().getProperty("heatnet.security.jwk-set-uri", "");
+            return v != null && !v.isEmpty();
+        }
     }
 
     private CorsConfigurationSource corsSource() {

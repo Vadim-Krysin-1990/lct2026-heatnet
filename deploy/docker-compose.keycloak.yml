@@ -36,7 +36,8 @@ services:
       HEATNET_SECURITY_ENABLED: "true"
       HEATNET_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/heatnet
       HEATNET_OIDC_CLIENT_ID: heatnet-viewer
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/heatnet
+      # ключи забираем по имени сервиса внутри compose: внешний адрес из контейнера может быть недоступен
+      HEATNET_OIDC_JWKS: http://keycloak:8080/realms/heatnet/protocol/openid-connect/certs
     depends_on:
       - keycloak
 

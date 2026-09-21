@@ -38,6 +38,8 @@ heatnet:
     # Включается оверлеем deploy/docker-compose.keycloak.yml (HEATNET_SECURITY_ENABLED=true).
     enabled: ${HEATNET_SECURITY_ENABLED:false}
     issuer-uri: ${HEATNET_OIDC_ISSUER:}
+    # внутренний адрес ключей Keycloak в сети compose (issuer при этом остаётся внешним)
+    jwk-set-uri: ${HEATNET_OIDC_JWKS:}
     client-id: ${HEATNET_OIDC_CLIENT_ID:heatnet-viewer}
     cors-origins: ${HEATNET_CORS_ORIGINS:*}
   storage-dir: ${HEATNET_STORAGE:/var/lib/heatnet}   # входные файлы, результаты, временные NDJSON
