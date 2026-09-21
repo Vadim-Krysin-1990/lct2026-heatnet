@@ -26,6 +26,7 @@ services:
       HEATNET_DB_USER: heatnet
       HEATNET_DB_PASSWORD: heatnet
       HEATNET_STORAGE: /var/lib/heatnet
+      HEATNET_SAMPLES: /app/data/samples
       HEATNET_TMP: /tmp/heatnet
       HEATNET_WORKERS: "2"
       JAVA_OPTS: "-Xmx6g"

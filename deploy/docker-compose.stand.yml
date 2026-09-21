@@ -12,6 +12,11 @@ services:
       - "80:80"
     volumes:
       - ./viewer:/usr/share/nginx/html:ro
-      - ./data/samples:/usr/share/nginx/data/samples:ro
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
+
+  app:
+    # свежие образцы без пересборки образа
+    volumes:
+      - heatnet-data:/var/lib/heatnet
+      - ./data/samples:/app/data/samples:ro

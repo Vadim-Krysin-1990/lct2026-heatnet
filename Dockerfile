@@ -10,6 +10,8 @@ FROM eclipse-temurin:11-jre
 RUN mkdir -p /var/lib/heatnet /tmp/heatnet
 WORKDIR /app
 COPY --from=build /build/target/heatnet.jar /app/heatnet.jar
+# образцы для просмотрщика раздаёт сам сервис (/api/samples), поэтому они кладутся в образ
+COPY data/samples /app/data/samples
 EXPOSE 8080
 ENV JAVA_OPTS="-Xmx6g"
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/heatnet.jar"]

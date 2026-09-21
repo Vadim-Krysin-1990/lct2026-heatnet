@@ -65,9 +65,11 @@ public class SecurityConfig {
             return http.build();
         }
         log.info("Проверка токенов включена: сервис принимает JWT Keycloak");
+        // открыта только оболочка страницы и сведения о том, куда идти за токеном:
+        // данные, документация API и расчёт доступны после входа
         http.authorizeRequests()
                 .antMatchers("/", "/index.html", "/viewer/**", "/lib/**", "/actuator/health",
-                        "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/api/auth/config").permitAll()
+                        "/api/auth/config").permitAll()
                 .antMatchers(org.springframework.http.HttpMethod.POST, "/api/process", "/api/jobs", "/api/rules/reload")
                     .hasAnyRole("HEATNET-ENGINEER", "HEATNET-ADMIN")
                 .antMatchers("/api/**").hasAnyRole("HEATNET-VIEWER", "HEATNET-ENGINEER", "HEATNET-ADMIN")
