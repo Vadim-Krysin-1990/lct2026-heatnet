@@ -51,7 +51,7 @@ class DepthTest {
     }
 
     @Test
-    void depthModeBuildsProfileAndZ() throws Exception {
+    void depthModeBuildsProfile() throws Exception {
         InputLoader loader = new InputLoader(rules);
         InputModel m;
         try (InputStream in = getClass().getResourceAsStream("/depth_case.geojson")) { m = loader.load(in); }
@@ -66,25 +66,26 @@ class DepthTest {
         for (Diagnostics.Message msg : m.diagnostics.messages) if (msg.code.startsWith("DEPTH") || msg.code.equals("VARIANT")) System.out.println(msg.level + " " + msg.code + ": " + msg.text);
         Variant v = deep.variants.get(0);
         assertTrue(v.unconnectedOksIds.isEmpty());
-        boolean shallow = false, hasZ = true;
+        boolean shallow = false;
         double minDepth = 99, maxDepth = 0;
         for (Variant.NewSegment s : v.segments) {
             assertNotNull(s.depthStart, s.id); assertNotNull(s.depthEnd, s.id);
             minDepth = Math.min(minDepth, Math.min(s.depthStart, s.depthEnd));
             maxDepth = Math.max(maxDepth, Math.max(s.depthStart, s.depthEnd));
             if (s.depthStart < 2.99 || s.depthEnd < 2.99) shallow = true;
-            for (Coordinate c : s.geom.getCoordinates()) if (Double.isNaN(c.getZ())) hasZ = false;
+
             System.out.printf("   %s %s→%s dn=%d L=%.2f %s depth %.2f→%.2f Kгл=%.3f cost=%.0f%n", s.id, s.startNodeId, s.endNodeId, s.diameter, s.length, s.layingMethod, s.depthStart, s.depthEnd, s.kDepth, s.cost);
         }
         assertTrue(shallow, "должны быть участки над кабелем/газом мельче 3 м");
-        assertTrue(hasZ, "у всех координат должна быть Z");
+        // ТП от 21.09.2026, §5: Z в геометрии не требуется, глубина задаётся атрибутами
         assertEquals(1.975, minDepth, 0.01);
         assertEquals(3.0, maxDepth, 0.01);
         assertTrue(v.techNodes.size() >= 4, "техузлы в вершинах профиля: " + v.techNodes.size());
         assertTrue(v.segments.size() > f.segments.size());
         // сводка пересчитана
         double sum = 0; for (Variant.NewSegment s : v.segments) sum += s.cost;
-        assertEquals(sum, v.constructionCost, 1.0);
+        assertEquals(sum + v.chamberConstructionCost + v.existingChamberTieInCost, v.constructionCost, 1.0);
+        assertEquals(v.constructionCost + v.unconnectedPenalty, v.calculatedCost, 1.0);
         Files.createDirectories(Paths.get("target"));
         try (FileOutputStream fos = new FileOutputStream("target/depth_case_result.geojson")) { new GeoJsonWriter(loader.crs()).write(deep.variants, fos); }
     }

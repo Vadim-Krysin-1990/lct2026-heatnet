@@ -58,15 +58,14 @@ class ContestDatasetTest {
         System.out.println("stats: " + m.diagnostics.stats);
         assertFalse(out.variants.isEmpty(), "нет вариантов");
         for (Variant v : out.variants) {
-            System.out.printf("Вариант %s (%s): rank %d, участков %d, врезок %d, камер %d, техузлов %d, реконструкций %d/%d, неподключено %s, C=%.0f, L=%.1f, S=%.3f, %d мс%n",
-                    v.variantId, v.strategy, v.rank, v.segments.size(), v.tieIns.size(), v.chambers.size(), v.techNodes.size(),
-                    v.reconstructions.size(), v.chamberReconstructions.size(), v.unconnectedOksIds, v.calculatedCost, v.length, v.score, v.computeMillis);
+            System.out.printf("Вариант %s (%s): rank %d, участков %d, камер %d, врезок в существующие камеры %d, техузлов %d, неподключено %s, C=%.0f, L=%.1f, S=%.3f, %d мс%n",
+                    v.variantId, v.strategy, v.rank, v.segments.size(), v.chambers.size(), v.existingChamberTieInCount, v.techNodes.size(),
+                    v.unconnectedOksIds, v.calculatedCost, v.newNetworkLength, v.score, v.computeMillis);
             for (String n : v.notes) System.out.println("   note: " + n);
         }
         Variant first = out.variants.get(0);
         for (Variant.NewSegment s : first.segments) System.out.printf("   seg %s %s→%s flow=%.1f dn=%d L=%.1f %s cost=%.0f served=%s%n", s.id, s.startNodeId, s.endNodeId, s.flowTph, s.diameter, s.length, s.layingMethod, s.cost, s.servedPoints);
-        for (Variant.TieIn t : first.tieIns) System.out.printf("   tie %s → %s %s existing=%d required=%d added=%.1f%n", t.id, t.existingObjectType, t.existingObjectId, t.existingDiameter, t.requiredDiameter, t.addedFlowTph);
-        for (Variant.SegmentReconstruction r : first.reconstructions) System.out.printf("   recon %s seg %s %d→%d added=%.1f L=%.1f cost=%.0f%n", r.id, r.existingObjectId, r.existingDiameter, r.requiredDiameter, r.addedFlowTph, r.length, r.cost);
+        for (Variant.TieIn t : first.tieIns) System.out.printf("   присоединение %s → %s %s (%s)%n", t.id, t.existingObjectType, t.existingObjectId, t.toExistingChamber ? "врезка в существующую камеру, 5 млн" : "новая камера на участке");
         Path target = Paths.get("target");
         Files.createDirectories(target);
         try (FileOutputStream fos = new FileOutputStream(target.resolve("contest_result.geojson").toFile())) {
@@ -87,7 +86,7 @@ class ContestDatasetTest {
         assertFalse(out.variants.isEmpty());
         for (Variant v : out.variants) {
             for (Variant.NewSegment s : v.segments) { assertNotNull(s.depthStart, s.id); assertNotNull(s.depthEnd, s.id); }
-            System.out.printf("Глубина, вариант %s (%s): участков %d, техузлов %d, C=%.0f, L=%.1f, S=%.3f%n", v.variantId, v.strategy, v.segments.size(), v.techNodes.size(), v.calculatedCost, v.length, v.score);
+            System.out.printf("Глубина, вариант %s (%s): участков %d, техузлов %d, C=%.0f, L=%.1f, S=%.3f%n", v.variantId, v.strategy, v.segments.size(), v.techNodes.size(), v.calculatedCost, v.newNetworkLength, v.score);
         }
         try (FileOutputStream fos = new FileOutputStream(Paths.get("target").resolve("contest_result_depth.geojson").toFile())) {
             new GeoJsonWriter(loader.crs()).write(out.variants, fos);

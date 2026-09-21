@@ -86,7 +86,7 @@ public class VariantPlanner {
             diag.info("TRACE_QUALITY", "Вариант " + v.variantId + " (" + st.name + "): " + GeoUtil.round(q[0], 1)
                     + " поворотов на км, медиана прямого участка " + GeoUtil.round(q[1], 1) + " м, прямых углов " + (int) q[3]
                     + ", косых изломов на трассе " + (int) q[2] + " (сверх них " + (int) q[4] + " поворотов на выходе из зданий по нормали к стене — требование заказчика)", null);
-            diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.length) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
+            diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.newNetworkLength) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
             all.add(v);
             if (first == null) first = v;
         }
@@ -285,7 +285,7 @@ public class VariantPlanner {
         if (!ta.equals(tb)) return false;
         if (a.chambers.size() != b.chambers.size()) return false;
         double dc = Math.abs(a.calculatedCost - b.calculatedCost) / Math.max(1, Math.max(a.calculatedCost, b.calculatedCost));
-        double dl = Math.abs(a.length - b.length) / Math.max(1, Math.max(a.length, b.length));
+        double dl = Math.abs(a.newNetworkLength - b.newNetworkLength) / Math.max(1, Math.max(a.newNetworkLength, b.newNetworkLength));
         return dc < 0.03 && dl < 0.03;
     }
 
@@ -293,15 +293,13 @@ public class VariantPlanner {
     private static void renumber(Variant v) {
         String p = "v" + v.variantId + "_";
         java.util.Map<String, String> map = new java.util.HashMap<>();
-        for (Variant.TieIn t : v.tieIns) { String n = p + t.id; map.put(t.id, n); t.id = n; }
         for (Variant.NewChamber c : v.chambers) { String n = p + c.id; map.put(c.id, n); c.id = n; }
+        for (Variant.TieIn t : v.tieIns) t.id = p + t.id;
         for (Variant.TechNode t : v.techNodes) { String n = p + t.id; map.put(t.id, n); t.id = n; }
         for (Variant.NewSegment s : v.segments) {
             s.id = p + s.id;
             s.startNodeId = map.getOrDefault(s.startNodeId, s.startNodeId);
             s.endNodeId = map.getOrDefault(s.endNodeId, s.endNodeId);
         }
-        for (Variant.SegmentReconstruction r : v.reconstructions) r.id = p + r.id;
-        for (Variant.ChamberReconstruction r : v.chamberReconstructions) r.id = p + r.id;
     }
 }

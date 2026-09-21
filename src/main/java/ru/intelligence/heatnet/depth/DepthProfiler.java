@@ -204,15 +204,13 @@ public class DepthProfiler {
                 ns.kDepth = (d0 > normal + 1e-9 || d1 > normal + 1e-9) ? rules.kDepthAvg(d0, d1) : 1.0;
                 Geometry sub = lil.extractLine(s0, s1);
                 Coordinate[] sc = sub.getCoordinates();
-                Coordinate[] withZ = new Coordinate[sc.length];
-                for (int k = 0; k < sc.length; k++) {
-                    double sk = lil.project(sc[k]);
-                    if (k == 0) sk = s0; if (k == sc.length - 1) sk = s1;
-                    withZ[k] = new Coordinate(sc[k].x, sc[k].y, -depthAt(verts, sk));
-                }
-                ns.geom = GeoUtil.GF.createLineString(withZ);
-                double planLen = s1 - s0;
-                ns.length = Math.hypot(planLen, d1 - d0);   // длина с учётом наклона
+                // ТП от 21.09.2026, §5: Z-координаты не требуются, вертикальное положение задаётся
+                // атрибутами depth_start/depth_end; длина для стоимости и предельной длины —
+                // по горизонтальной проекции в EPSG:32637
+                Coordinate[] plan = new Coordinate[sc.length];
+                for (int k = 0; k < sc.length; k++) plan[k] = new Coordinate(sc[k].x, sc[k].y);
+                ns.geom = GeoUtil.GF.createLineString(plan);
+                ns.length = s1 - s0;
                 ns.cost = ns.length * ref.spec(ns.diameter).newCostPerM * ns.kSpecial * ns.kDepth;
                 // узлы
                 boolean lastPiece = i + 2 == cutList.size();
@@ -225,7 +223,7 @@ public class DepthProfiler {
                     else {
                         Variant.TechNode t = new Variant.TechNode();
                         t.id = "dnode_" + (++nodeCounter);
-                        t.geom = GeoUtil.point(withZ[withZ.length - 1]);
+                        t.geom = GeoUtil.point(plan[plan.length - 1]);
                         nodes.add(t);
                         endNode = t.id;
                     }

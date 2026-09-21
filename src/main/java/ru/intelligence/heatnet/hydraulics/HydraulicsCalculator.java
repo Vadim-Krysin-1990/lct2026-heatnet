@@ -90,40 +90,57 @@ public class HydraulicsCalculator {
         Map<Edge, Integer> upsized = new HashMap<>();
         for (Edge e : nb.edges()) { dn.put(e, ref.diameterForFlow(flow.get(e))); upsized.put(e, 0); }
 
-        // 3. предельная длина: связные части одной номенклатуры (Q&A: при ветвлении суммируется вся часть)
-        for (int iter = 0; iter < 1 + ref.lengthLimit.allowUpsizeSteps; iter++) {
+        // 3. предельная длина проверяется отдельно по каждому непрерывному пути от точки подключения
+        // к месту присоединения; длины параллельных ветвей не суммируются (ТП §2.3, Разъяснения п. 2).
+        // Если минимальный по расходу ДУ не удовлетворяет предельной длине, берётся следующий ДУ,
+        // удовлетворяющий обоим условиям; завышать ДУ произвольно нельзя.
+        for (int iter = 0; iter < 8; iter++) {
             boolean changed = false;
-            Set<Edge> seen = new HashSet<>();
-            for (Edge start : nb.edges()) {
-                if (seen.contains(start)) continue;
-                int d = dn.get(start).dn;
-                List<Edge> comp = new ArrayList<>();
-                Deque<Edge> q = new ArrayDeque<>(); q.add(start); seen.add(start);
-                while (!q.isEmpty()) {
-                    Edge e = q.poll(); comp.add(e);
-                    // через врезку не проходим: каждая часть новой сети присоединяется к существующей в одной точке (ТЗ 2.2)
-                    for (Node n : new Node[]{e.a, e.b}) {
-                        if (n.kind == NodeKind.TIE_IN) continue;
-                        for (Edge o : n.edges) if (!seen.contains(o) && dn.get(o).dn == d) { seen.add(o); q.add(o); }
-                    }
+            for (Node leaf : nb.nodes().values()) {
+                if (leaf.kind != NodeKind.CONNECTION_POINT) continue;
+                List<Edge> path = new ArrayList<>();
+                Node cur = leaf; Edge from = null;
+                while (true) {
+                    Edge up = null;
+                    for (Edge e : cur.edges) if (e != from && upstreamNode.get(e) != cur) { up = e; break; }
+                    if (up == null) break;
+                    path.add(up);
+                    cur = upstreamNode.get(up);
+                    from = up;
+                    if (cur == null || cur.kind == NodeKind.TIE_IN) break;
                 }
-                double total = 0; for (Edge e : comp) total += e.length();
-                double limit = ref.spec(d).maxLengthM;
-                if (total > limit + 1e-6) {
-                    DiameterSpec next = ref.nextStep(d);
-                    int steps = ref.lengthLimit.allowUpsizeSteps;
-                    boolean canUpsize = next != null;
-                    for (Edge e : comp) if (upsized.get(e) >= steps) canUpsize = false;
-                    if (canUpsize) {
-                        // поднимаем ДУ у всей части (не более чем на одну ступень, ТП §3 / Q&A)
-                        for (Edge e : comp) { dn.put(e, next); upsized.merge(e, 1, Integer::sum); }
-                        v.notes.add("Часть сети ДУ" + d + " длиной " + GeoUtil.round(total, 1) + " м превышает предельную " + limit + " м — ДУ поднят до " + next.dn);
-                        diag.info("LENGTH_LIMIT_UPSIZE", "Вариант " + v.variantId + ": часть сети ДУ" + d + " (" + GeoUtil.round(total, 1) + " м > " + limit + " м) поднята до ДУ" + next.dn, null);
-                        changed = true;
-                    } else {
-                        diag.warn("LENGTH_LIMIT_EXCEEDED", "Вариант " + v.variantId + ": часть сети ДУ" + d + " длиной " + GeoUtil.round(total, 1) + " м превышает предельную " + limit + " м, ДУ уже поднят на допустимую ступень — требуется ручная проработка (доп. камера/иная трасса)", null);
-                        v.notes.add("Превышена предельная длина для ДУ" + d + ": " + GeoUtil.round(total, 1) + " м > " + limit + " м, дальнейшее увеличение ДУ не допускается");
+                // группы подряд идущих участков одного ДУ вдоль пути
+                int k = 0;
+                while (k < path.size()) {
+                    int d = dn.get(path.get(k)).dn;
+                    double run = 0; int end = k;
+                    while (end < path.size() && dn.get(path.get(end)).dn == d) { run += path.get(end).length(); end++; }
+                    double limit = ref.spec(d).maxLengthM;
+                    if (run > limit + 1e-6) {
+                        DiameterSpec next = ref.nextStep(d);
+                        if (next != null) {
+                            for (int q = k; q < end; q++) dn.put(path.get(q), next);
+                            diag.info("LENGTH_LIMIT_UPSIZE", "Вариант " + v.variantId + ": путь от точки " + leaf.id
+                                    + " содержит непрерывную часть ДУ" + d + " длиной " + GeoUtil.round(run, 1)
+                                    + " м при предельной " + limit + " м — выбран следующий ДУ" + next.dn, leaf.id);
+                            changed = true;
+                        } else {
+                            diag.warn("LENGTH_LIMIT_EXCEEDED", "Вариант " + v.variantId + ": путь от точки " + leaf.id
+                                    + ": часть ДУ" + d + " длиной " + GeoUtil.round(run, 1) + " м превышает предельную "
+                                    + limit + " м, увеличить ДУ нельзя — требуется ручная проработка", leaf.id);
+                            v.notes.add("Превышена предельная длина для ДУ" + d + " на пути от точки " + leaf.id);
+                        }
                     }
+                    k = end;
+                }
+            }
+            // ДУ по направлению к месту присоединения не уменьшается (ТП §2.3)
+            for (Edge e : nb.edges()) {
+                Node up = upstreamNode.get(e);
+                if (up == null) continue;
+                for (Edge o : up.edges) {
+                    if (o == e || upstreamNode.get(o) == up) continue;   // o — ребро выше по потоку
+                    if (dn.get(o).dn < dn.get(e).dn) { dn.put(o, dn.get(e)); changed = true; }
                 }
             }
             if (!changed) break;
@@ -208,43 +225,48 @@ public class HydraulicsCalculator {
                     break;
                 }
                 case TIE_IN: {
-                    // каждое ребро, входящее в врезку, — независимая врезка (Q&A: несколько веток в одну камеру = несколько врезок)
-                    int k = 0;
-                    for (Edge e : n.edges) {
-                        Variant.TieIn t = new Variant.TieIn();
-                        t.id = n.edges.size() == 1 ? n.id : n.id + "_" + (++k);
-                        t.geom = GeoUtil.point(n.xy);
-                        t.existingObjectId = n.existingObjectId;
-                        t.existingObjectType = n.existingObjectType;
-                        t.requiredDiameter = dn.get(e).dn;
-                        t.addedFlowTph = flow.get(e);
-                        t.fractionAlong = n.fractionAlong;
-                        t.cost = ref.tieIn.cost;
-                        if ("heat_chamber".equals(n.existingObjectType)) {
-                            ExistingChamber ch = topo.chamber(n.existingObjectId);
-                            t.existingDiameter = ch.diameter != null ? ch.diameter : topo.maxAdjacentDiameter(ch);
-                        } else {
-                            t.existingDiameter = topo.segment(n.existingObjectId).diameter;
+                    boolean existingChamber = "heat_chamber".equals(n.existingObjectType);
+                    if (existingChamber) {
+                        // присоединение к существующей камере: каждый входящий участок — врезка 5 млн (ТП §3.2),
+                        // отдельный объект в выход не пишется, участки ссылаются на id существующей камеры
+                        ExistingChamber ch = topo.chamber(n.existingObjectId);
+                        int existingDn = ch != null && ch.diameter != null ? ch.diameter : (ch != null ? topo.maxAdjacentDiameter(ch) : 0);
+                        int k = 0;
+                        for (Edge e : n.edges) {
+                            Variant.TieIn t = new Variant.TieIn();
+                            t.id = n.id + "_" + (++k);
+                            t.geom = GeoUtil.point(n.xy);
+                            t.existingObjectId = n.existingObjectId;
+                            t.existingObjectType = "heat_chamber";
+                            t.existingDiameter = existingDn;
+                            t.requiredDiameter = dn.get(e).dn;
+                            t.addedFlowTph = flow.get(e);
+                            t.cost = ref.tieIn.cost;
+                            t.toExistingChamber = true;
+                            v.tieIns.add(t);
+                            Variant.NewSegment s2 = segOf.get(e);
+                            if (s2 != null) {
+                                if (s2.startNodeId.equals(n.id)) s2.startNodeId = n.existingObjectId;
+                                else if (s2.endNodeId.equals(n.id)) s2.endNodeId = n.existingObjectId;
+                            }
                         }
+                    } else {
+                        // присоединение к участку существующей сети: в точке ставится новая камера,
+                        // её стоимость уже включает присоединение, отдельной врезки нет (ТП §2.4, §3.2)
+                        Variant.NewChamber c = new Variant.NewChamber();
+                        c.id = n.id; c.geom = GeoUtil.point(n.xy);
+                        c.diameter = maxDnAtNode.getOrDefault(n.id, 0);
+                        c.cost = ref.chamberCost(c.diameter);
+                        v.chambers.add(c);
+                        Variant.TieIn t = new Variant.TieIn();
+                        t.id = n.id; t.geom = GeoUtil.point(n.xy);
+                        t.existingObjectId = n.existingObjectId;
+                        t.existingObjectType = "heat_network";
+                        t.existingDiameter = topo.segment(n.existingObjectId) != null ? topo.segment(n.existingObjectId).diameter : 0;
+                        t.requiredDiameter = c.diameter;
+                        t.cost = 0;
+                        t.toExistingChamber = false;
                         v.tieIns.add(t);
-                        // сегменты, начинающиеся в узле врезки, должны ссылаться на id врезки
-                        Variant.NewSegment s = segOf.get(e);
-                        if (s != null) { if (s.startNodeId.equals(n.id)) s.startNodeId = t.id; else if (s.endNodeId.equals(n.id)) s.endNodeId = t.id; }
-                    }
-                    if (n.edges.size() > 1 && "heat_network".equals(n.existingObjectType)) {
-                        // несколько веток в одну точку трубы: там стоит новая камера
-                        Variant.NewChamber c = new Variant.NewChamber();
-                        c.id = n.id + "_ch"; c.geom = GeoUtil.point(n.xy);
-                        c.diameter = maxDnAtNode.getOrDefault(n.id, 0);
-                        c.cost = ref.chamberCost(c.diameter);
-                        v.chambers.add(c);
-                    } else if ("heat_network".equals(n.existingObjectType)) {
-                        // врезка в трубу вдали от камеры → новая камера в точке врезки (ТП §2.3, §8.2)
-                        Variant.NewChamber c = new Variant.NewChamber();
-                        c.id = n.id + "_ch"; c.geom = GeoUtil.point(n.xy);
-                        c.diameter = maxDnAtNode.getOrDefault(n.id, 0);
-                        c.cost = ref.chamberCost(c.diameter);
-                        v.chambers.add(c);
                     }
                     break;
                 }
@@ -252,10 +274,7 @@ public class HydraulicsCalculator {
             }
         }
 
-        // 6. реконструкция существующей сети: добавленный расход от каждой врезки к источнику (ТП §7)
-        reconstruction(v, diag);
-
-        // 7. сводка
+        // 6. сводка (реконструкция существующей сети в расчётной модели не выполняется — ТП от 21.09.2026, §2.4)
         summarize(v);
     }
 
@@ -270,100 +289,24 @@ public class HydraulicsCalculator {
         return r;
     }
 
-    /** Распространение добавленного расхода к источнику и определение реконструируемых частей. */
-    private void reconstruction(Variant v, Diagnostics diag) {
-        // по каждому существующему участку: список точек деления (доли) и добавленный расход на интервалах
-        Map<String, TreeMap<Double, Double>> addedByPart = new HashMap<>(); // seg → (from-fraction sorted) — упрощённо через интервалы
-        Map<String, List<double[]>> intervals = new HashMap<>();            // seg → [from, to, added]
-        Map<String, Double> addedAtChamber = new HashMap<>();
-        for (Variant.TieIn t : v.tieIns) {
-            List<NetworkTopology.ChainPart> chain;
-            if ("heat_chamber".equals(t.existingObjectType)) {
-                chain = topo.upstreamChainFromChamber(topo.chamber(t.existingObjectId));
-                addedAtChamber.merge(t.existingObjectId, t.addedFlowTph, Double::sum);
-            } else {
-                ExistingSegment s = topo.segment(t.existingObjectId);
-                double f = t.fractionAlong != null ? t.fractionAlong : GeoUtil.fractionAlong(s.geom, t.geom.getCoordinate());
-                chain = topo.upstreamChain(s, f);
-            }
-            if (chain.isEmpty()) diag.warn("NO_UPSTREAM_CHAIN", "Врезка " + t.id + ": не удалось построить цепочку к источнику", t.id);
-            for (NetworkTopology.ChainPart p : chain) {
-                intervals.computeIfAbsent(p.seg.id, k -> new ArrayList<>()).add(new double[]{Math.min(p.from, p.to), Math.max(p.from, p.to), t.addedFlowTph});
-            }
-        }
-        // по участкам: разбить на элементарные интервалы по всем границам, просуммировать добавленный расход
-        Map<String, Integer> requiredDnAtSegment = new HashMap<>();
-        for (Map.Entry<String, List<double[]>> e : intervals.entrySet()) {
-            ExistingSegment s = topo.segment(e.getKey());
-            TreeMap<Double, Boolean> cuts = new TreeMap<>();
-            for (double[] iv : e.getValue()) { cuts.put(iv[0], true); cuts.put(iv[1], true); }
-            List<Double> b = new ArrayList<>(cuts.keySet());
-            List<double[]> parts = new ArrayList<>(); // [from, to, added]
-            for (int i = 0; i + 1 < b.size(); i++) {
-                double f0 = b.get(i), f1 = b.get(i + 1);
-                if (f1 - f0 < 1e-9) continue;
-                double mid = (f0 + f1) / 2, added = 0;
-                for (double[] iv : e.getValue()) if (iv[0] <= mid && mid <= iv[1]) added += iv[2];
-                parts.add(new double[]{f0, f1, added});
-            }
-            // слить соседние части с одинаковым добавленным расходом
-            List<double[]> merged = new ArrayList<>();
-            for (double[] p : parts) {
-                if (!merged.isEmpty() && Math.abs(merged.get(merged.size() - 1)[2] - p[2]) < 1e-9 && Math.abs(merged.get(merged.size() - 1)[1] - p[0]) < 1e-9) merged.get(merged.size() - 1)[1] = p[1];
-                else merged.add(p);
-            }
-            for (double[] p : merged) {
-                double existing = s.flowOrZero();
-                double total = existing + p[2];
-                DiameterSpec req = ref.diameterForFlow(total);
-                if (req.dn > s.diameter) {
-                    Variant.SegmentReconstruction r = new Variant.SegmentReconstruction();
-                    r.id = "recon_" + (v.reconstructions.size() + 1);
-                    r.existingObjectId = s.id;
-                    r.geom = GeoUtil.substring(s.geom, p[0], p[1]);
-                    r.existingFlowTph = existing; r.addedFlowTph = p[2]; r.calculatedFlowTph = total;
-                    r.existingDiameter = s.diameter; r.requiredDiameter = req.dn;
-                    r.length = r.geom.getLength();
-                    r.cost = r.length * req.reconCostPerM;
-                    v.reconstructions.add(r);
-                    requiredDnAtSegment.merge(s.id, req.dn, Math::max);
-                }
-            }
-        }
-        // реконструкция камер-врезок (ТП §8.2): max ДУ примыкающих (существующих с учётом реконструкции + новых) > ДУ камеры
-        Set<String> doneChambers = new HashSet<>();
-        for (Variant.TieIn t : v.tieIns) {
-            if (!"heat_chamber".equals(t.existingObjectType) || !doneChambers.add(t.existingObjectId)) continue;
-            ExistingChamber ch = topo.chamber(t.existingObjectId);
-            int existingDn = ch.diameter != null ? ch.diameter : topo.maxAdjacentDiameter(ch);
-            int maxDn = 0;
-            for (ExistingSegment s : topo.chamberSegments(ch)) maxDn = Math.max(maxDn, Math.max(s.diameter, requiredDnAtSegment.getOrDefault(s.id, 0)));
-            for (Variant.TieIn t2 : v.tieIns) if (t2.existingObjectId.equals(ch.id)) maxDn = Math.max(maxDn, t2.requiredDiameter);
-            if (maxDn > existingDn) {
-                Variant.ChamberReconstruction r = new Variant.ChamberReconstruction();
-                r.id = "chrecon_" + (v.chamberReconstructions.size() + 1);
-                r.existingObjectId = ch.id; r.geom = ch.geom;
-                r.existingDiameter = existingDn; r.requiredDiameter = maxDn;
-                r.cost = ref.chamberCost(maxDn);
-                v.chamberReconstructions.add(r);
-            }
-        }
-    }
-
+    /** Сводка по варианту (ТП от 21.09.2026, §6): стоимость строительства + штраф; L — длина новых участков. */
     public void summarize(Variant v) {
         v.constructionCost = 0; v.newNetworkLength = 0;
-        for (Variant.NewSegment s : v.segments) { v.constructionCost += s.cost; v.newNetworkLength += s.length; }
-        v.chamberConstructionCost = 0; for (Variant.NewChamber c : v.chambers) v.chamberConstructionCost += c.cost;
-        v.tieInCost = 0; for (Variant.TieIn t : v.tieIns) v.tieInCost += t.cost;
-        v.reconstructionCost = 0; v.reconstructionLength = 0;
-        for (Variant.SegmentReconstruction r : v.reconstructions) { v.reconstructionCost += r.cost; v.reconstructionLength += r.length; }
-        v.chamberReconstructionCost = 0; for (Variant.ChamberReconstruction r : v.chamberReconstructions) v.chamberReconstructionCost += r.cost;
+        double segments = 0;
+        for (Variant.NewSegment s : v.segments) { segments += s.cost; v.newNetworkLength += s.length; }
+        v.chamberConstructionCost = 0;
+        for (Variant.NewChamber c : v.chambers) v.chamberConstructionCost += c.cost;
+        v.existingChamberTieInCount = 0; v.existingChamberTieInCost = 0;
+        for (Variant.TieIn t : v.tieIns) {
+            if (t.toExistingChamber) { v.existingChamberTieInCount++; v.existingChamberTieInCost += t.cost; }
+        }
+        v.constructionCost = segments + v.chamberConstructionCost + v.existingChamberTieInCost;
         v.unconnectedPenalty = 0;
         Map<String, ConnectionPoint> cp = new HashMap<>();
         for (ConnectionPoint p : model.points) cp.put(p.id, p);
         for (String id : v.unconnectedOksIds) if (cp.containsKey(id)) v.unconnectedPenalty += ref.penalty(cp.get(id).flowTph);
-        v.calculatedCost = v.constructionCost + v.chamberConstructionCost + v.tieInCost + v.reconstructionCost + v.chamberReconstructionCost + v.unconnectedPenalty;
-        v.length = v.newNetworkLength + v.reconstructionLength;
-        v.score = ref.score(v.calculatedCost, v.length);
+        v.calculatedCost = v.constructionCost + v.unconnectedPenalty;
+        v.score = ref.score(v.calculatedCost, v.newNetworkLength);
     }
+
 }

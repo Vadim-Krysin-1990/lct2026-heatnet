@@ -57,29 +57,19 @@ class ApiSmokeTest {
                     for (String k : new String[]{"start_node_id", "end_node_id", "flow_tph", "diameter", "length", "laying_method", "depth_start", "depth_end", "cost"}) assertTrue(p.has(k), k);
                     assertEquals("LineString", f.get("geometry").get("type").asText());
                     break;
-                case "tie_in":
-                    for (String k : new String[]{"existing_object_id", "existing_object_type", "existing_diameter", "required_diameter", "cost"}) assertTrue(p.has(k), k);
-                    break;
                 case "heat_chamber":
                     assertTrue(p.has("diameter") && p.has("cost"));
-                    assertFalse(p.has("existing_object_id"));
                     break;
                 case "technical_node":
                     assertEquals(3, p.size(), "у техузла только id, object_type, variant_id");
                     break;
-                case "heat_network_reconstruction":
-                    for (String k : new String[]{"existing_object_id", "existing_flow_tph", "added_flow_tph", "calculated_flow_tph", "existing_diameter", "required_diameter", "length", "cost"}) assertTrue(p.has(k), k);
-                    break;
-                case "heat_chamber_reconstruction":
-                    for (String k : new String[]{"existing_object_id", "existing_diameter", "required_diameter", "cost"}) assertTrue(p.has(k), k);
-                    break;
                 case "variant_summary":
                     summaries++;
                     assertTrue(f.get("geometry").isNull());
-                    for (String k : new String[]{"rank", "construction_cost", "chamber_construction_cost", "tie_in_cost", "reconstruction_cost", "chamber_reconstruction_cost", "unconnected_penalty", "calculated_cost", "new_network_length", "reconstruction_length", "length", "score", "unconnected_oks_ids"}) assertTrue(p.has(k), k);
-                    double sum = p.get("construction_cost").asDouble() + p.get("chamber_construction_cost").asDouble() + p.get("tie_in_cost").asDouble()
-                            + p.get("reconstruction_cost").asDouble() + p.get("chamber_reconstruction_cost").asDouble() + p.get("unconnected_penalty").asDouble();
-                    assertEquals(sum, p.get("calculated_cost").asDouble(), 5.0);
+                    for (String k : new String[]{"rank", "construction_cost", "chamber_construction_cost", "existing_chamber_tie_in_count", "existing_chamber_tie_in_cost", "unconnected_penalty", "calculated_cost", "new_network_length", "score", "unconnected_oks_ids"}) assertTrue(p.has(k), k);
+                    // ТП §6: итоговая стоимость = стоимость строительства + штраф за неподключённые точки
+                    assertEquals(p.get("construction_cost").asDouble() + p.get("unconnected_penalty").asDouble(),
+                            p.get("calculated_cost").asDouble(), 5.0);
                     break;
                 default:
                     throw new AssertionError("неизвестный тип в выходе: " + type);

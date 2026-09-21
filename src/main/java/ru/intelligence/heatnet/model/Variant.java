@@ -30,6 +30,10 @@ public class Variant {
         public List<String> servedPoints = new ArrayList<>();
     }
 
+    /**
+     * Присоединение новой сети к существующей. Отдельным объектом выхода не является (ТП от 21.09.2026,
+     * §2.4): либо новая камера в точке присоединения, либо врезка в существующую камеру за 5 млн.
+     */
     public static class TieIn {
         public String id;
         public Point geom;
@@ -39,10 +43,10 @@ public class Variant {
         public int existingDiameter;
         public int requiredDiameter;
         public double cost;
-        /** Служебное: добавленный расход через врезку. */
         public double addedFlowTph;
-        /** Служебное: доля вдоль участка (0..1 от начала LineString), если врезка в участок. */
         public Double fractionAlong;
+        /** true — присоединение к существующей камере (врезка 5 млн), false — новая камера на участке. */
+        public boolean toExistingChamber;
     }
 
     public static class NewChamber {
@@ -57,28 +61,6 @@ public class Variant {
         public Point geom;
     }
 
-    public static class SegmentReconstruction {
-        public String id;
-        public String existingObjectId;
-        public LineString geom;
-        public double existingFlowTph;
-        public double addedFlowTph;
-        public double calculatedFlowTph;
-        public int existingDiameter;
-        public int requiredDiameter;
-        public double length;
-        public double cost;
-    }
-
-    public static class ChamberReconstruction {
-        public String id;
-        public String existingObjectId;
-        public Point geom;
-        public int existingDiameter;
-        public int requiredDiameter;
-        public double cost;
-    }
-
     public String variantId;
     public String strategy;
     public String description;
@@ -88,22 +70,19 @@ public class Variant {
     public final List<TieIn> tieIns = new ArrayList<>();
     public final List<NewChamber> chambers = new ArrayList<>();
     public final List<TechNode> techNodes = new ArrayList<>();
-    public final List<SegmentReconstruction> reconstructions = new ArrayList<>();
-    public final List<ChamberReconstruction> chamberReconstructions = new ArrayList<>();
     public final List<String> unconnectedOksIds = new ArrayList<>();
     public final List<String> notes = new ArrayList<>();
 
     // сводка (ТП §10.7)
     public double constructionCost;
     public double chamberConstructionCost;
-    public double tieInCost;
-    public double reconstructionCost;
-    public double chamberReconstructionCost;
+    /** Количество врезок в существующие тепловые камеры. */
+    public int existingChamberTieInCount;
+    /** Стоимость врезок в существующие камеры, входит в construction_cost. */
+    public double existingChamberTieInCost;
     public double unconnectedPenalty;
     public double calculatedCost;
     public double newNetworkLength;
-    public double reconstructionLength;
-    public double length;
     public double score;
     public long computeMillis;
     // метрики качества трассы (в выходной GeoJSON не идут, только в диагностику и сравнение вариантов)

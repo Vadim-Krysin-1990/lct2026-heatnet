@@ -62,6 +62,9 @@ class RulesTest {
         assertEquals(7.0, oks.clearance(800, 1.0));
         assertEquals(9.0, oks.clearance(900, 1.0));
         assertEquals(oks.clearanceByDn, rr.resolve("oks_future").clearanceByDn);
+        // ТП от 21.09.2026, табл. 2: железная дорога — непроходимое ограничение с отступом 1 м
+        assertFalse(rr.resolve("railway").isSpecial());
+        assertEquals(1.0, rr.resolve("railway").clearance(200, 1.0));
         RestrictionRules.Rule road = rr.resolve("road");
         assertTrue(road.isSpecial());
         assertEquals(1.60, road.kSpecial);
@@ -79,12 +82,11 @@ class RulesTest {
     }
 
     @Test
-    void gaugesFromTable42() {
+    void gaugesFromTable1() {
         ReferenceRules r = rules.reference();
         assertEquals(0.880, r.spec(200).widthM, 1e-9);
         assertEquals(0.315, r.spec(200).heightM, 1e-9);
         assertEquals(1042, r.spec(200).maxLengthM, 1e-9);
         assertEquals(120_275, r.spec(200).newCostPerM, 1e-9);
-        assertEquals(181_766, r.spec(200).reconCostPerM, 1e-9);
     }
 }

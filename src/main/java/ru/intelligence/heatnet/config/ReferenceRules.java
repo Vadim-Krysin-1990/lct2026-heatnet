@@ -17,7 +17,6 @@ public class ReferenceRules {
         public double capacityTph;
         public double maxLengthM;
         public double newCostPerM;
-        public double reconCostPerM;
         public double shellOdM;
         public double gapM;
         public double widthM;

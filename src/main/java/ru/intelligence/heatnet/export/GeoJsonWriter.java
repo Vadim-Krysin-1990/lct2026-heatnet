@@ -61,33 +61,6 @@ public class GeoJsonWriter {
             g.writeNumberField("cost", Math.round(s.cost));
             endFeature(g);
         }
-        for (Variant.TieIn t : v.tieIns) {
-            startFeature(g, t.geom);
-            g.writeStringField("id", t.id);
-            g.writeStringField("object_type", "tie_in");
-            g.writeStringField("variant_id", v.variantId);
-            g.writeStringField("existing_object_id", t.existingObjectId);
-            g.writeStringField("existing_object_type", t.existingObjectType);
-            g.writeNumberField("existing_diameter", t.existingDiameter);
-            g.writeNumberField("required_diameter", t.requiredDiameter);
-            g.writeNumberField("cost", Math.round(t.cost));
-            endFeature(g);
-        }
-        for (Variant.SegmentReconstruction r : v.reconstructions) {
-            startFeature(g, r.geom);
-            g.writeStringField("id", r.id);
-            g.writeStringField("object_type", "heat_network_reconstruction");
-            g.writeStringField("variant_id", v.variantId);
-            g.writeStringField("existing_object_id", r.existingObjectId);
-            g.writeNumberField("existing_flow_tph", GeoUtil.round(r.existingFlowTph, 3));
-            g.writeNumberField("added_flow_tph", GeoUtil.round(r.addedFlowTph, 3));
-            g.writeNumberField("calculated_flow_tph", GeoUtil.round(r.calculatedFlowTph, 3));
-            g.writeNumberField("existing_diameter", r.existingDiameter);
-            g.writeNumberField("required_diameter", r.requiredDiameter);
-            g.writeNumberField("length", GeoUtil.round(r.length, 2));
-            g.writeNumberField("cost", Math.round(r.cost));
-            endFeature(g);
-        }
         for (Variant.NewChamber c : v.chambers) {
             startFeature(g, c.geom);
             g.writeStringField("id", c.id);
@@ -97,17 +70,6 @@ public class GeoJsonWriter {
             g.writeNumberField("cost", Math.round(c.cost));
             endFeature(g);
         }
-        for (Variant.ChamberReconstruction r : v.chamberReconstructions) {
-            startFeature(g, r.geom);
-            g.writeStringField("id", r.id);
-            g.writeStringField("object_type", "heat_chamber_reconstruction");
-            g.writeStringField("variant_id", v.variantId);
-            g.writeStringField("existing_object_id", r.existingObjectId);
-            g.writeNumberField("existing_diameter", r.existingDiameter);
-            g.writeNumberField("required_diameter", r.requiredDiameter);
-            g.writeNumberField("cost", Math.round(r.cost));
-            endFeature(g);
-        }
         for (Variant.TechNode t : v.techNodes) {
             startFeature(g, t.geom);
             g.writeStringField("id", t.id);
@@ -115,7 +77,7 @@ public class GeoJsonWriter {
             g.writeStringField("variant_id", v.variantId);
             endFeature(g);
         }
-        // сводка
+        // сводка по варианту (ТП от 21.09.2026, §7.2)
         g.writeStartObject();
         g.writeStringField("type", "Feature");
         g.writeNullField("geometry");
@@ -126,15 +88,12 @@ public class GeoJsonWriter {
         g.writeNumberField("rank", v.rank);
         g.writeNumberField("construction_cost", Math.round(v.constructionCost));
         g.writeNumberField("chamber_construction_cost", Math.round(v.chamberConstructionCost));
-        g.writeNumberField("tie_in_cost", Math.round(v.tieInCost));
-        g.writeNumberField("reconstruction_cost", Math.round(v.reconstructionCost));
-        g.writeNumberField("chamber_reconstruction_cost", Math.round(v.chamberReconstructionCost));
+        g.writeNumberField("existing_chamber_tie_in_count", v.existingChamberTieInCount);
+        g.writeNumberField("existing_chamber_tie_in_cost", Math.round(v.existingChamberTieInCost));
         g.writeNumberField("unconnected_penalty", Math.round(v.unconnectedPenalty));
         g.writeNumberField("calculated_cost", Math.round(v.calculatedCost));
         g.writeNumberField("new_network_length", GeoUtil.round(v.newNetworkLength, 2));
-        g.writeNumberField("reconstruction_length", GeoUtil.round(v.reconstructionLength, 2));
-        g.writeNumberField("length", GeoUtil.round(v.length, 2));
-        g.writeNumberField("score", GeoUtil.round(v.score, 3));
+        g.writeNumberField("score", GeoUtil.round(v.score, 4));
         g.writeArrayFieldStart("unconnected_oks_ids");
         for (String id : v.unconnectedOksIds) g.writeString(id);
         g.writeEndArray();
