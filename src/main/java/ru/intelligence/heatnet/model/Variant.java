@@ -63,6 +63,8 @@ public class Variant {
 
     public String variantId;
     public String strategy;
+    /** Короткое название варианта для подписи в выдаче и на карте. */
+    public String name;
     public String description;
     public int rank;
 

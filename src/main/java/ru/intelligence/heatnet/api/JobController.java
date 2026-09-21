@@ -48,11 +48,12 @@ public class JobController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> submit(
             @Parameter(description = "Входной файл GeoJSON (FeatureCollection, WGS 84)") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины") @RequestParam(name = "depth", defaultValue = "false") boolean depth) throws IOException {
+            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины") @RequestParam(name = "depth", defaultValue = "false") boolean depth,
+            @Parameter(description = "Сколько вариантов включить в выдачу; 0 — по правилам (ТП §2.8: до трёх)") @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
         JobEntity j;
         try (InputStream in = file.getInputStream()) {
-            j = jobs.submit(in, file.getOriginalFilename(), Map.of("depth", depth));
+            j = jobs.submit(in, file.getOriginalFilename(), Map.of("depth", depth, "variants", variants));
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(toMap(j));
     }

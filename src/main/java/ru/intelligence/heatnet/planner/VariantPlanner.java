@@ -37,10 +37,16 @@ public class VariantPlanner {
         public long millis;
     }
 
-    public Outcome plan(InputModel model) { return plan(model, false); }
+    public Outcome plan(InputModel model) { return plan(model, false, 0); }
 
-    /** @param depthMode дополнительная задача: трассировка с учётом глубины */
-    public Outcome plan(InputModel model, boolean depthMode) {
+    public Outcome plan(InputModel model, boolean depthMode) { return plan(model, depthMode, 0); }
+
+    /**
+     * @param depthMode дополнительная задача: трассировка с учётом глубины
+     * @param maxVariantsOverride сколько вариантов включить в выдачу; 0 — из правил (ТП §2.8: до трёх).
+     *        Значения больше трёх используются для демонстрации и сравнения стратегий.
+     */
+    public Outcome plan(InputModel model, boolean depthMode, int maxVariantsOverride) {
         long t0 = System.currentTimeMillis();
         Diagnostics diag = model.diagnostics;
         ReferenceRules ref = rules.reference();
@@ -66,6 +72,7 @@ public class VariantPlanner {
             Variant v = new Variant();
             v.variantId = String.valueOf(idx);
             v.strategy = st.name;
+            v.name = st.title != null ? st.title : st.name;
             v.description = st.description;
             NetworkBuilder nb = new NetworkBuilder();
             RoutePlanner planner = new RoutePlanner(rules, model, topo, field);
@@ -102,7 +109,11 @@ public class VariantPlanner {
         // В выдачу обязательно попадают инженерные (ортогональные) трассировки: у них качество геометрии
         // ближе к практике проектирования — длинные прямые участки и повороты 90°. Остальные места
         // занимают лучшие по показателю S. Порядок (rank) назначается строго по S, как требует ТП §9.
-        int max = rules.routing().maxVariants;
+        int max = maxVariantsOverride > 0 ? maxVariantsOverride : rules.routing().maxVariants;
+        if (max > rules.routing().maxVariants)
+            diag.info("VARIANTS_EXTENDED", "Запрошено вариантов: " + max + ". Техническое приложение (§2.8) допускает до "
+                    + rules.routing().maxVariants + " содержательно разных вариантов — в конкурсную выдачу идут первые "
+                    + rules.routing().maxVariants + " по рангу, остальные показаны для сравнения стратегий", null);
         List<Variant> selected = new ArrayList<>();
         for (Variant v : distinct) {
             if (selected.size() >= Math.min(max, rules.routing().orthogonalVariantsInOutput)) break;
@@ -150,6 +161,7 @@ public class VariantPlanner {
         s.name = name;
         switch (name) {
             case "orthogonal_city": {
+                s.title = "Инженерный: вдоль застройки, свои врезки";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
                 s.sharpTurnFactor = rules.routing().sharpTurnFactor;
@@ -160,6 +172,7 @@ public class VariantPlanner {
                 break;
             }
             case "orthogonal_alt_tie_in": {
+                s.title = "Инженерный: общий ствол, другие врезки";
                 if (first == null) return null;
                 s.attachToNewNetwork = true; s.order = "flow_desc";
                 s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
@@ -177,6 +190,7 @@ public class VariantPlanner {
                 break;
             }
             case "orthogonal_shared": {
+                s.title = "Инженерный: общая сеть, минимум врезок";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
                 s.sharpTurnFactor = rules.routing().sharpTurnFactor;
@@ -186,6 +200,7 @@ public class VariantPlanner {
                 break;
             }
             case "free_angle_shared": {
+                s.title = "Кратчайший: спрямление, общая сеть";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
                 s.sharpTurnFactor = 1;
@@ -196,6 +211,7 @@ public class VariantPlanner {
                 break;
             }
             case "free_angle_separate": {
+                s.title = "Кратчайший: спрямление, свои врезки";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
                 s.sharpTurnFactor = 1;
@@ -207,10 +223,12 @@ public class VariantPlanner {
                 break;
             }
             case "shared_tree":
+                s.title = "Контрольный: общая сеть по сетке";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.description = "Общая сеть: ближние к существующей сети точки образуют ствол, остальные присоединяются к новой сети через камеры";
                 break;
             case "alt_tie_in": {
+                s.title = "Контрольный: другие точки врезки";
                 if (first == null) return null;
                 s.attachToNewNetwork = true; s.order = "distance";
                 double r = rules.routing().altTieInExclusionRadiusM;
@@ -224,19 +242,23 @@ public class VariantPlanner {
                 break;
             }
             case "separate_parts":
+                s.title = "Контрольный: отдельные части сети";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
                 s.description = "Отдельные части сети: присоединение к уже построенной новой сети штрафуется, точки вблизи существующей сети получают собственные врезки";
                 break;
             case "flow_first":
+                s.title = "Контрольный: ствол от крупных потребителей";
                 s.attachToNewNetwork = true; s.order = "flow_desc";
                 s.description = "Общая сеть от крупных потребителей: ствол строится от точек с наибольшим расходом";
                 break;
             case "far_first":
+                s.title = "Контрольный: ствол от дальних точек";
                 s.attachToNewNetwork = true; s.order = "distance_desc";
                 s.description = "Общая сеть: ствол от самых удалённых точек";
                 break;
             case "independent":
+                s.title = "Контрольный: раздельное подключение";
                 s.attachToNewNetwork = false; s.order = "distance";
                 s.description = "Раздельное подключение: каждая точка своей врезкой; пересекающиеся трассы объединяются";
                 break;

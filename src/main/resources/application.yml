@@ -33,6 +33,13 @@ springdoc:
     operationsSorter: method
 
 heatnet:
+  security:
+    # Конкурсный контур поднимается без внешних систем: проверка токенов выключена.
+    # Включается оверлеем deploy/docker-compose.keycloak.yml (HEATNET_SECURITY_ENABLED=true).
+    enabled: ${HEATNET_SECURITY_ENABLED:false}
+    issuer-uri: ${HEATNET_OIDC_ISSUER:}
+    client-id: ${HEATNET_OIDC_CLIENT_ID:heatnet-viewer}
+    cors-origins: ${HEATNET_CORS_ORIGINS:*}
   storage-dir: ${HEATNET_STORAGE:/var/lib/heatnet}   # входные файлы, результаты, временные NDJSON
   workers: ${HEATNET_WORKERS:2}                         # параллельных расчётов; остальные — в очереди
   rules-dir: ${HEATNET_RULES:}                          # если пусто — правила из classpath:rules/

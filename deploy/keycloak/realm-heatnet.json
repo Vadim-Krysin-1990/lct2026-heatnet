@@ -1,0 +1,74 @@
+{
+  "realm": "heatnet",
+  "enabled": true,
+  "displayName": "heatnet — трассировка тепловых сетей",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginTheme": "keycloak",
+  "accessTokenLifespan": 3600,
+  "roles": {
+    "realm": [
+      { "name": "heatnet-admin", "description": "Администратор сервиса: правила, журнал, расчёты" },
+      { "name": "heatnet-engineer", "description": "Инженер: запуск расчётов и просмотр результатов" },
+      { "name": "heatnet-viewer", "description": "Наблюдатель: только просмотр результатов и журнала" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "heatnet-viewer",
+      "name": "Просмотрщик трасс",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "audience-heatnet",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "heatnet-viewer",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin.heat",
+      "enabled": true,
+      "firstName": "Администратор",
+      "lastName": "Сервиса",
+      "email": "admin.heat@example.org",
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
+      "realmRoles": ["heatnet-admin"]
+    },
+    {
+      "username": "engineer",
+      "enabled": true,
+      "firstName": "Инженер",
+      "lastName": "Теплосетей",
+      "email": "engineer@example.org",
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
+      "realmRoles": ["heatnet-engineer"]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "firstName": "Наблюдатель",
+      "lastName": "ДИТ",
+      "email": "viewer@example.org",
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
+      "realmRoles": ["heatnet-viewer"]
+    }
+  ]
+}

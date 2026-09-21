@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.intelligence.heatnet.config.RulesService;
+import ru.intelligence.heatnet.events.EventService;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -20,9 +21,11 @@ import java.util.Map;
 public class RulesController {
 
     private final RulesService rules;
+    private final EventService events;
 
-    public RulesController(RulesService rules) {
+    public RulesController(RulesService rules, EventService events) {
         this.rules = rules;
+        this.events = events;
     }
 
     @Operation(summary = "Справочник расчёта (табл. 4.1, 4.2, 8.2, 8.3, 9 ТП)")
@@ -52,6 +55,8 @@ public class RulesController {
         m.put("diameters", rules.reference().diameters.size());
         m.put("restriction_types", rules.restrictions().types.size());
         m.put("grid_step_m", rules.routing().gridStepM);
+        // правила задают нормативную часть расчёта, поэтому их перечитывание — событие журнала
+        events.info("RULES_RELOADED", "Правила перечитаны из YAML", m);
         return m;
     }
 }

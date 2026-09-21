@@ -60,6 +60,8 @@ public class RoutePlanner {
         public double sharpTurnFactor = 1;
         /** Спрямлять трассу произвольным углом (ТП от 21.09 §2.1: допустим любой поворот до 90°). */
         public boolean freeAngle = false;
+        /** Короткое название варианта («какой он») для подписи в выдаче. */
+        public String title;
         public String description;
     }
 

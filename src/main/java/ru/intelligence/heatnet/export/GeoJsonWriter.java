@@ -102,6 +102,9 @@ public class GeoJsonWriter {
         g.writeStringField("object_type", "variant_summary");
         g.writeStringField("variant_id", v.variantId);
         g.writeNumberField("rank", v.rank);
+        // подпись «какой это вариант»: стратегия трассировки словами (дополнительный атрибут сводки)
+        if (v.name != null) g.writeStringField("variant_name", v.name);
+        if (v.description != null) g.writeStringField("variant_description", v.description);
         g.writeNumberField("construction_cost", Math.round(v.constructionCost));
         g.writeNumberField("chamber_construction_cost", Math.round(v.chamberConstructionCost));
         g.writeNumberField("existing_chamber_tie_in_count", v.existingChamberTieInCount);

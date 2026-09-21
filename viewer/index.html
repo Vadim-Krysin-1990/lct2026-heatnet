@@ -35,7 +35,49 @@
   }
   html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink);
     font: 14px/1.45 "Golos Text", -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
-  #app { display: grid; grid-template-columns: 384px 1fr; height: 100%; }
+  body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: 100%; height: 100%; }
+
+  /* шапка сервиса и вкладки — единая оболочка над всеми экранами */
+  .appbar { display: flex; align-items: center; gap: 12px; padding: 10px 18px;
+    background: var(--accent); color: #fff; }
+  .appbar .mark { width: 34px; height: 34px; border-radius: 8px; background: #fff; color: var(--accent);
+    display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: 0 0 auto; }
+  .appbar .ttl { font-weight: 600; font-size: 15px; line-height: 1.2; }
+  .appbar .sub { font-size: 11.5px; opacity: .85; }
+  .appbar .spacer { margin-left: auto; }
+  .appbar .who { text-align: right; font-size: 12px; line-height: 1.25; }
+  .appbar .who .role { opacity: .8; font-size: 11px; }
+  .appbar button { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; padding: 6px 12px; font-size: 12.5px; }
+  .appbar button:hover { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.5); }
+  .appbar .brandsw button[aria-pressed="true"] { background: #fff; color: var(--accent); }
+  .appbar .brandsw { display: inline-flex; gap: 4px; }
+
+  .tabs { display: flex; gap: 2px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; background: transparent; border-radius: 0; padding: 10px 14px; font-size: 13px;
+    color: var(--ink); border-bottom: 2px solid transparent; }
+  .tabs button:hover { border-color: var(--line); }
+  .tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+  /* все экраны занимают одну и ту же строку сетки: переключение вкладок не двигает шапку */
+  .page { display: none; grid-row: 3; grid-column: 1; min-height: 0; overflow: auto; }
+  .page.active { display: block; }
+  #page-map.active { display: grid; overflow: hidden; }
+  .page-inner { padding: 18px 22px 40px; max-width: 1100px; }
+  .page-inner h2 { margin-top: 24px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar input, .toolbar select { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+  table.grid { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.grid th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.grid tr.best td { background: var(--accent-soft); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); }
+  .pill.INFO { color: #0b6b3a; border-color: #0b6b3a55; }
+  .pill.WARNING { color: #8a5a00; border-color: #8a5a0055; }
+  .pill.ERROR { color: #a11; border-color: #a1111155; }
+  #app { display: grid; grid-template-columns: 384px 1fr; height: 100%; min-height: 0; }
   #panel { overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
   .brandbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px 12px;
     background: var(--accent); color: #fff; position: sticky; top: 0; z-index: 5; }
@@ -66,6 +108,16 @@
   td { padding: 5px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
   td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: 0; }
+  #variants { display: grid; gap: 6px; }
+  .vbtn { display: grid; grid-template-columns: 26px 1fr; align-items: start; gap: 8px; text-align: left;
+    padding: 8px 10px; line-height: 1.25; }
+  .vbtn .num { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; }
+  .vbtn.active .num { background: rgba(255,255,255,.22); color: #fff; }
+  .vbtn .ttl { font-size: 12.5px; font-weight: 600; }
+  .vbtn .fig { font-size: 11.5px; opacity: .8; font-variant-numeric: tabular-nums; }
+  .vname { margin: 10px 0 6px; font-size: 13px; }
+  .vname .muted { margin-top: 2px; }
   .legend div { margin: 3px 0; }
   .legend span { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 8px; border-radius: 2px; }
   .legend .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -76,7 +128,7 @@
   .leaflet-tooltip.money { font-weight: 600; color: #0b3d62; }
 
   /* поворот карты «как в навигаторе»: вращается само полотно, подписи и значки — обратно */
-  #mapwrap { position: relative; overflow: hidden; height: 100%; background: #eceeee; }
+  #mapwrap { position: relative; overflow: hidden; height: 100%; min-width: 0; background: #eceeee; }
   #map { position: absolute; transform-origin: 50% 50%; transform: rotate(var(--rot, 0deg)); }
   .up { display: inline-block; transform: rotate(calc(-1 * var(--rot, 0deg))); transform-origin: 50% 50%; }
   .leaflet-popup-content-wrapper { transform: rotate(calc(-1 * var(--rot, 0deg))); }
@@ -110,25 +162,43 @@
     font-size: 16px; line-height: 1; padding: 4px; cursor: pointer; }
   #notes { font-size: 12px; color: #a33; white-space: pre-wrap; }
   @media (max-width: 760px) {
+    .appbar { flex-wrap: wrap; gap: 8px; }
+    .appbar .who { display: none; }
+    .tabs { overflow-x: auto; }
     #app { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }
     #panel { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
   }
 </style>
 </head>
 <body>
+<header class="appbar">
+  <div class="mark" id="brandMark">М</div>
+  <div>
+    <div class="ttl" id="brandTitle">Москва · городские сервисы</div>
+    <div class="sub">heatnet — моделирование трасс подключения к тепловым сетям</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="brandsw switch" role="group" aria-label="Фирменный стиль">
+    <button type="button" id="brandMos" aria-pressed="true">ДИТ</button>
+    <button type="button" id="brandMoek" aria-pressed="false">МОЭК</button>
+  </div>
+  <div class="who"><div class="name" id="whoName">анонимно</div><div class="role" id="whoRole">вход не требуется</div></div>
+  <button type="button" id="authBtn" hidden>Войти</button>
+</header>
+<nav class="tabs" role="tablist">
+  <button type="button" role="tab" data-page="map" aria-selected="true">Карта</button>
+  <button type="button" role="tab" data-page="variants" aria-selected="false">Варианты</button>
+  <button type="button" role="tab" data-page="log" aria-selected="false">Журнал событий</button>
+  <button type="button" role="tab" data-page="rules" aria-selected="false">Правила расчёта</button>
+  <button type="button" role="tab" data-page="about" aria-selected="false">О сервисе</button>
+</nav>
+<section class="page active" id="page-map">
 <div id="app">
   <div id="panel">
-    <div class="brandbar"><div class="mark" id="brandMark">М</div><b id="brandTitle">Москва · городские сервисы</b><span class="sub">heatnet</span></div>
     <div class="content">
     <h1>Трассы подключения к тепловым сетям</h1>
     <div class="muted">Предварительная трассировка для технологического присоединения: места присоединения,
       новые камеры, условные диаметры и стоимость. Расчёт выполняет сервис, страница только показывает результат.</div>
-
-    <h2>Оформление</h2>
-    <div class="switch" role="group" aria-label="Фирменный стиль">
-      <button type="button" id="brandMos" aria-pressed="true">Москва · ДИТ</button>
-      <button type="button" id="brandMoek" aria-pressed="false">МОЭК</button>
-    </div>
 
     <h2>Файлы</h2>
     <div class="drop" id="dropIn">Входной GeoJSON (датасет)<input type="file" id="fileIn" accept=".geojson,.json"></div>
@@ -138,8 +208,8 @@
       <label class="chk"><input type="checkbox" id="money"> подписи стоимости на новых участках</label>
     </div>
 
-    <h2>Вариант</h2>
-    <div class="row" id="variants"><span class="muted">загрузите результат</span></div>
+    <h2>Варианты трассировки</h2>
+    <div id="variants"><span class="muted">загрузите результат</span></div>
     <div id="summary"></div>
     <div id="notes"></div>
 
@@ -155,6 +225,7 @@
       <div><span class="sq" style="background:var(--net-existing)"></span>существующая камера · <span class="sq" style="background:var(--net-new)"></span>новая камера</div>
       <div><span class="dot" style="background:#111;width:6px;height:6px"></span>технический узел</div>
       <div><span class="sq" style="background:#c8c8c8"></span>ОКС · <span class="sq" style="background:#9ecae1"></span>вода · <span class="sq" style="background:#f0c070"></span>железная дорога</div>
+    </div>
     </div>
   </div>
   <div id="mapwrap">
@@ -176,11 +247,99 @@
     <div class="inspect" id="inspect" hidden></div>
   </div>
 </div>
+</section>
+
+<section class="page" id="page-variants">
+  <div class="page-inner">
+    <h1>Сравнение вариантов трассировки</h1>
+    <div class="muted">Сервис считает все стратегии и ранжирует по показателю S = 0,7·(C/25 млн) + 0,3·(L/100)
+      (техприложение §6). В конкурсную выдачу идут первые три; остальные показаны для сравнения.</div>
+    <div id="variantTable"></div>
+  </div>
+</section>
+
+<section class="page" id="page-log">
+  <div class="page-inner">
+    <h1>Журнал событий</h1>
+    <div class="muted">Кто и когда запускал расчёт, какие файлы принимались, чем закончилось.
+      Записи хранятся в базе сервиса и доступны по <code>GET /api/events</code>.</div>
+    <div class="toolbar">
+      <select id="logType"><option value="">все события</option></select>
+      <select id="logLevel">
+        <option value="">любой уровень</option><option value="INFO">INFO</option>
+        <option value="WARNING">WARNING</option><option value="ERROR">ERROR</option>
+      </select>
+      <input type="text" id="logActor" placeholder="пользователь" size="14">
+      <button type="button" id="logReload">Обновить</button>
+      <span class="muted" id="logCount"></span>
+    </div>
+    <div id="logTable"><span class="muted">нажмите «Обновить»</span></div>
+  </div>
+</section>
+
+<section class="page" id="page-rules">
+  <div class="page-inner">
+    <h1>Правила расчёта</h1>
+    <div class="muted">Нормативная часть вынесена в YAML и читается сервисом на лету: справочник диаметров и
+      стоимости (таблица 1 ТП), отступы и коэффициенты по видам ограничений (таблица 2), параметры трассировки.
+      Эксперт правит правила без программиста, сервис перечитывает их по <code>POST /api/rules/reload</code>.</div>
+    <div class="toolbar">
+      <button type="button" class="rbtn" data-rules="reference">Справочник расчёта</button>
+      <button type="button" class="rbtn" data-rules="restrictions">Ограничения</button>
+      <button type="button" class="rbtn" data-rules="routing">Параметры трассировки</button>
+    </div>
+    <div id="rulesBox"><span class="muted">выберите раздел</span></div>
+  </div>
+</section>
+
+<section class="page" id="page-about">
+  <div class="page-inner">
+    <h1>О сервисе</h1>
+    <p>heatnet — сервис моделирования трасс подключения объектов капитального строительства к существующим
+      тепловым сетям. Вход и выход — GeoJSON структуры технического приложения (редакция от 21.09.2026),
+      расчёт в проекции EPSG:32637, выдача в WGS 84.</p>
+    <h2>Как считает</h2>
+    <p>Трасса ищется алгоритмом A* по растровому окну, развёрнутому вдоль преобладающего направления застройки:
+      запрещённые зоны — буферы препятствий по таблице 2, специальные проходы (дороги, трамвай, газ, кабель)
+      пересекаются под нормируемым углом. Повороты круче 90° запрещены. Затем расходы собираются по дереву,
+      подбираются диаметры с проверкой предельной длины, ставятся камеры в точках ветвления и технические узлы.</p>
+    <h2>Интерфейсы</h2>
+    <table class="grid">
+      <tr><td><code>POST /api/process</code></td><td>синхронный расчёт: файл → GeoJSON (параметры <code>depth</code>, <code>variants</code>)</td></tr>
+      <tr><td><code>POST /api/jobs</code></td><td>очередь для файлов до 3 ГБ, результат — <code>GET /api/jobs/{id}/result</code></td></tr>
+      <tr><td><code>GET /api/events</code></td><td>журнал событий</td></tr>
+      <tr><td><code>GET /api/rules/*</code></td><td>действующие правила расчёта</td></tr>
+      <tr><td><a href="/swagger-ui.html" target="_blank" rel="noopener">/swagger-ui.html</a></td><td>описание API</td></tr>
+    </table>
+    <h2>Доступ</h2>
+    <p id="aboutAuth" class="muted">Проверка токенов выключена: сервис поднимается одним <code>docker-compose up</code>
+      без внешних систем, как требует конкурсная проверка. Единый вход через Keycloak включается оверлеем
+      <code>deploy/docker-compose.keycloak.yml</code>: роли heatnet-admin, heatnet-engineer, heatnet-viewer.</p>
+  </div>
+</section>
 
 <script src="lib/leaflet.js"></script>
 <script>
 (function () {
   // ---------- фирменный стиль заказчика ----------
+  const API = (location.port === '8777' ? 'http://13.143.181.167' : '') + '/api';
+  let token = null;
+
+  // ---------- вкладки оболочки ----------
+  const tabs = document.querySelectorAll('.tabs button');
+  function openPage(name) {
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.page === name)));
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+    if (name === 'map' && window._hnMap) setTimeout(() => { layout(); }, 30);
+    if (name === 'variants') renderVariantTable();
+    if (name === 'log') loadLog();
+    try { localStorage.setItem('heatnet.tab', name); } catch (e) { /* приватный режим */ }
+  }
+  tabs.forEach(t => t.addEventListener('click', () => openPage(t.dataset.page)));
+  let startTab = 'map';
+  try { startTab = localStorage.getItem('heatnet.tab') || 'map'; } catch (e) { /* приватный режим */ }
+  if (startTab !== 'map') setTimeout(() => openPage(startTab), 0);
+
   const brands = {
     mos:  { mark: 'М', title: 'Москва · городские сервисы' },
     moek: { mark: 'МОЭК', title: 'МОЭК · тепловые сети Москвы' }
@@ -188,7 +347,7 @@
   function setBrand(name) {
     document.documentElement.setAttribute('data-brand', name);
     document.getElementById('brandMark').textContent = brands[name].mark;
-    document.getElementById('brandMark').style.fontSize = name === 'moek' ? '8px' : '15px';
+    document.getElementById('brandMark').style.fontSize = name === 'moek' ? '9px' : '15px';
     document.getElementById('brandTitle').textContent = brands[name].title;
     document.getElementById('brandMos').setAttribute('aria-pressed', String(name === 'mos'));
     document.getElementById('brandMoek').setAttribute('aria-pressed', String(name === 'moek'));
@@ -446,12 +605,20 @@
   let result = null, current = null;
   function renderVariants(fc) {
     result = fc;
+    if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
     const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
     const box = document.getElementById('variants'); box.innerHTML = '';
     ids.forEach(id => {
-      const b = document.createElement('button'); b.textContent = 'Вариант ' + id;
-      const s = fc.features.find(f => f.properties.object_type === 'variant_summary' && f.properties.variant_id === id);
-      if (s) b.title = 'rank ' + s.properties.rank + ', S = ' + s.properties.score;
+      const b = document.createElement('button');
+      b.className = 'vbtn'; b.dataset.variant = id;
+      const f = fc.features.find(x => x.properties.object_type === 'variant_summary' && x.properties.variant_id === id);
+      const s = f ? f.properties : {};
+      const name = s.variant_name || ('Вариант ' + id);
+      const figures = s.new_network_length != null
+        ? `${fmt(s.new_network_length)} м · ${rub(s.calculated_cost)} · S=${s.score}` : '';
+      b.innerHTML = `<span class="num">${s.rank || id}</span><span><span class="ttl">${name}</span><br>
+        <span class="fig">${figures}</span></span>`;
+      if (s.variant_description) b.title = s.variant_description;
       b.addEventListener('click', () => showVariant(id));
       box.appendChild(b);
     });
@@ -473,7 +640,7 @@
     current = id;
     costLabels = [];
     pinned = null; inspectEl.hidden = true;
-    document.querySelectorAll('#variants button').forEach(b => b.classList.toggle('active', b.textContent.endsWith(' ' + id)));
+    document.querySelectorAll('#variants button').forEach(b => b.classList.toggle('active', b.dataset.variant === id));
     ['rnet', 'rspecial', 'rrecon', 'rtie', 'rch', 'rnode'].forEach(n => groups[n] && groups[n].clearLayers());
     const gNet = group('rnet', 'новая сеть'), gSp = group('rspecial', 'спецпроходы'), gRec = group('rrecon', 'реконструкция'),
           gTie = group('rtie', 'врезки'), gCh = group('rch', 'новые камеры'), gNode = group('rnode', 'технические узлы');
@@ -520,7 +687,10 @@
     applyCostLabels();
     const counts = t => feats.filter(f => f.properties.object_type === t).length;
     const s = summary || {};
-    document.getElementById('summary').innerHTML = `<table>
+    document.getElementById('summary').innerHTML = `
+      <div class="vname"><b>${s.variant_name || ('Вариант ' + id)}</b>
+        <div class="muted">${s.variant_description || ''}</div></div>
+      <table>
       <tr><td>Место (rank)</td><td><b>${s.rank ?? '—'}</b></td></tr>
       <tr><td>Показатель S</td><td><b>${s.score ?? '—'}</b></td></tr>
       <tr><td>Итоговая стоимость</td><td><b>${s.calculated_cost != null ? fmtM(s.calculated_cost) : '—'}</b></td></tr>
@@ -536,6 +706,166 @@
       <tr><td>Неподключённые ОКС</td><td>${(s.unconnected_oks_ids && s.unconnected_oks_ids.length) ? s.unconnected_oks_ids.join(', ') : 'нет'}</td></tr>
     </table>`;
   }
+
+  // ---------- экран «Варианты» ----------
+  function renderVariantTable() {
+    const box = document.getElementById('variantTable');
+    if (!result) { box.innerHTML = '<span class="muted">результат ещё не загружен</span>'; return; }
+    const rows = result.features.filter(f => f.properties.object_type === 'variant_summary')
+      .map(f => f.properties).sort((a, b) => (a.rank || 99) - (b.rank || 99));
+    const count = (vid, t) => result.features.filter(f => f.properties.variant_id === vid && f.properties.object_type === t).length;
+    box.innerHTML = `<table class="grid">
+      <tr><th>Ранг</th><th>Вариант</th><th class="num">Длина, м</th><th class="num">Стоимость</th>
+          <th class="num">S</th><th class="num">Участков</th><th class="num">Камер</th><th class="num">Врезок в камеры</th><th>Неподключённые</th></tr>
+      ${rows.map(v => `<tr class="${v.rank === 1 ? 'best' : ''}">
+        <td class="num">${v.rank}</td>
+        <td><b>${v.variant_name || ('Вариант ' + v.variant_id)}</b><div class="muted">${v.variant_description || ''}</div></td>
+        <td class="num">${fmt(v.new_network_length)}</td>
+        <td class="num">${rub(v.calculated_cost)}</td>
+        <td class="num">${v.score}</td>
+        <td class="num">${count(v.variant_id, 'heat_network')}</td>
+        <td class="num">${count(v.variant_id, 'heat_chamber')}</td>
+        <td class="num">${v.existing_chamber_tie_in_count ?? 0}</td>
+        <td>${(v.unconnected_oks_ids && v.unconnected_oks_ids.length) ? v.unconnected_oks_ids.join(', ') : 'нет'}</td>
+      </tr>`).join('')}
+    </table>
+    <p class="muted">Показать вариант на карте — вкладка «Карта», кнопки слева.</p>`;
+  }
+
+  // ---------- экран «Журнал событий» ----------
+  async function api(path, opts) {
+    const o = Object.assign({ headers: {} }, opts || {});
+    if (token) o.headers['Authorization'] = 'Bearer ' + token;
+    const r = await fetch(API + path, o);
+    if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+    return r.json();
+  }
+  const logTypes = new Set();
+  async function loadLog() {
+    const box = document.getElementById('logTable');
+    const params = new URLSearchParams({ size: '100' });
+    const t = document.getElementById('logType').value, l = document.getElementById('logLevel').value,
+          a = document.getElementById('logActor').value.trim();
+    if (t) params.set('type', t);
+    if (l) params.set('level', l);
+    if (a) params.set('actor', a);
+    box.innerHTML = '<span class="muted">загружаю…</span>';
+    try {
+      const d = await api('/events?' + params.toString());
+      document.getElementById('logCount').textContent = 'всего записей: ' + d.total;
+      if (!d.items.length) { box.innerHTML = '<span class="muted">событий нет</span>'; return; }
+      d.items.forEach(e => logTypes.add(e.type));
+      const sel = document.getElementById('logType'), cur = sel.value;
+      sel.innerHTML = '<option value="">все события</option>' + [...logTypes].sort()
+        .map(x => `<option value="${x}"${x === cur ? ' selected' : ''}>${x}</option>`).join('');
+      box.innerHTML = `<table class="grid">
+        <tr><th>Время</th><th>Уровень</th><th>Событие</th><th>Пользователь</th><th>Сообщение</th><th class="num">Длительность</th></tr>
+        ${d.items.map(e => `<tr>
+          <td class="num">${new Date(e.ts).toLocaleString('ru-RU')}</td>
+          <td><span class="pill ${e.level}">${e.level}</span></td>
+          <td>${e.type}</td>
+          <td>${e.actor || '—'}</td>
+          <td>${e.message || ''}${e.details ? `<div class="muted">${e.details}</div>` : ''}</td>
+          <td class="num">${e.duration_ms != null ? fmt(e.duration_ms) + ' мс' : '—'}</td>
+        </tr>`).join('')}
+      </table>`;
+    } catch (e) {
+      box.innerHTML = '<span class="muted">журнал недоступен: ' + e.message + '. Страница открыта без сервиса?</span>';
+    }
+  }
+  document.getElementById('logReload').addEventListener('click', loadLog);
+  document.getElementById('logType').addEventListener('change', loadLog);
+  document.getElementById('logLevel').addEventListener('change', loadLog);
+
+  // ---------- экран «Правила» ----------
+  document.querySelectorAll('.rbtn').forEach(b => b.addEventListener('click', async () => {
+    document.querySelectorAll('.rbtn').forEach(x => x.classList.toggle('active', x === b));
+    const box = document.getElementById('rulesBox');
+    box.innerHTML = '<span class="muted">загружаю…</span>';
+    try {
+      const d = await api('/rules/' + b.dataset.rules);
+      box.innerHTML = '<pre style="white-space:pre-wrap;font-size:12px">' +
+        JSON.stringify(d, null, 2).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</pre>';
+    } catch (e) {
+      box.innerHTML = '<span class="muted">правила недоступны: ' + e.message + '</span>';
+    }
+  }));
+
+  // ---------- вход через Keycloak (authorization code + PKCE) ----------
+  const authBtn = document.getElementById('authBtn');
+  let oidc = { enabled: false };
+  function b64url(bytes) {
+    return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function pkce() {
+    const v = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+    return { verifier: v, challenge: b64url(digest) };
+  }
+  async function login() {
+    const p = await pkce();
+    sessionStorage.setItem('heatnet.pkce', p.verifier);
+    const u = new URL(oidc.issuer + '/protocol/openid-connect/auth');
+    u.searchParams.set('client_id', oidc.client_id);
+    u.searchParams.set('redirect_uri', location.origin + location.pathname);
+    u.searchParams.set('response_type', 'code');
+    u.searchParams.set('scope', 'openid profile');
+    u.searchParams.set('code_challenge', p.challenge);
+    u.searchParams.set('code_challenge_method', 'S256');
+    location.href = u.toString();
+  }
+  async function exchange(code) {
+    const verifier = sessionStorage.getItem('heatnet.pkce') || '';
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code', code, client_id: oidc.client_id,
+      redirect_uri: location.origin + location.pathname, code_verifier: verifier
+    });
+    const r = await fetch(oidc.issuer + '/protocol/openid-connect/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
+    });
+    if (!r.ok) throw new Error('обмен кода на токен не удался: ' + r.status);
+    const d = await r.json();
+    token = d.access_token;
+    try { sessionStorage.setItem('heatnet.token', token); } catch (e) { /* приватный режим */ }
+    history.replaceState({}, '', location.pathname);
+  }
+  function showUser(u) {
+    document.getElementById('whoName').textContent = u.username || 'анонимно';
+    const roles = (u.roles || []).map(r => r.replace(/^ROLE_HEATNET-/, '').toLowerCase());
+    document.getElementById('whoRole').textContent = u.authenticated
+      ? (roles.join(', ') || 'без ролей') : (oidc.enabled ? 'вход не выполнен' : 'вход не требуется');
+    authBtn.hidden = !oidc.enabled;
+    authBtn.textContent = u.authenticated ? 'Выйти' : 'Войти';
+    authBtn.onclick = u.authenticated ? logout : login;
+  }
+  function logout() {
+    const t = token;
+    token = null;
+    try { sessionStorage.removeItem('heatnet.token'); } catch (e) { /* приватный режим */ }
+    showUser({ authenticated: false, username: 'анонимно', roles: [] });
+    if (oidc.enabled && t) {
+      const u = new URL(oidc.issuer + '/protocol/openid-connect/logout');
+      u.searchParams.set('client_id', oidc.client_id);
+      u.searchParams.set('post_logout_redirect_uri', location.origin + location.pathname);
+      location.href = u.toString();
+    }
+  }
+  (async function initAuth() {
+    try { oidc = await api('/auth/config'); } catch (e) { oidc = { enabled: false }; }
+    if (oidc.enabled) {
+      const code = new URLSearchParams(location.search).get('code');
+      if (code) { try { await exchange(code); } catch (e) { console.warn(e); } }
+      else { try { token = sessionStorage.getItem('heatnet.token'); } catch (e) { /* приватный режим */ } }
+      document.getElementById('aboutAuth').textContent =
+        'Единый вход включён: токены выдаёт Keycloak (' + oidc.issuer + '), роли heatnet-admin / heatnet-engineer / heatnet-viewer.';
+    }
+    try {
+      const me = await api(token ? '/auth/session' : '/auth/me');
+      showUser(me);
+    } catch (e) {
+      showUser({ authenticated: false, username: 'анонимно', roles: [] });
+    }
+  })();
 
   // ---------- загрузка файлов ----------
   function readFile(file, cb) {

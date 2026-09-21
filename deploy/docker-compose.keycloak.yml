@@ -1,0 +1,44 @@
+# Единый вход через Keycloak поверх базового compose.
+#
+#   KEYCLOAK_PUBLIC_URL=http://<адрес стенда>:8081 \
+#   docker-compose -f docker-compose.yml -f deploy/docker-compose.stand.yml -f deploy/docker-compose.keycloak.yml up -d --build
+#
+# Realm, клиент, три роли и три пользователя заводятся автоматически из deploy/keycloak/realm-heatnet.json,
+# руками в админке настраивать нечего. Консоль администратора — порт KEYCLOAK_PORT (по умолчанию 8081),
+# логин admin/admin (меняется переменными).
+#
+# Оцениваемый конкурсный контур поднимается БЕЗ этого файла: `docker-compose up -d --build`,
+# проверка токенов выключена, сервис не зависит от внешних систем (ТЗ: офлайн, один compose).
+version: "3.8"
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      # адрес, по которому Keycloak видит браузер: иначе issuer в токене не совпадёт с проверяемым
+      KC_HOSTNAME_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}
+      KC_HOSTNAME_ADMIN_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_RELATIVE_PATH: /
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+      - kcdata:/opt/keycloak/data
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    restart: unless-stopped
+
+  app:
+    environment:
+      HEATNET_SECURITY_ENABLED: "true"
+      HEATNET_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/heatnet
+      HEATNET_OIDC_CLIENT_ID: heatnet-viewer
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/heatnet
+    depends_on:
+      - keycloak
+
+volumes:
+  kcdata:

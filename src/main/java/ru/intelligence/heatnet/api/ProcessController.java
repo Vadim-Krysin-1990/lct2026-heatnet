@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import ru.intelligence.heatnet.events.EventService;
 import ru.intelligence.heatnet.export.GeoJsonWriter;
 import ru.intelligence.heatnet.jobs.JobService;
 
@@ -33,9 +34,11 @@ import java.util.Map;
 public class ProcessController {
 
     private final JobService jobs;
+    private final EventService events;
 
-    public ProcessController(JobService jobs) {
+    public ProcessController(JobService jobs, EventService events) {
         this.jobs = jobs;
+        this.events = events;
     }
 
     @Operation(summary = "Рассчитать варианты подключения и вернуть выходной GeoJSON",
@@ -44,15 +47,37 @@ public class ProcessController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = "application/geo+json")
     public ResponseEntity<StreamingResponseBody> process(
             @Parameter(description = "Входной файл GeoJSON") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины (Z-координаты, профиль, Kгл)") @RequestParam(name = "depth", defaultValue = "false") boolean depth) throws IOException {
+            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины (Z-координаты, профиль, Kгл)") @RequestParam(name = "depth", defaultValue = "false") boolean depth,
+            @Parameter(description = "Сколько вариантов включить в выдачу; 0 — по правилам (ТП §2.8: до трёх). Больше трёх — для демонстрации и сравнения стратегий") @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
+        Map<String, Object> ev = new LinkedHashMap<>();
+        ev.put("file", file.getOriginalFilename());
+        ev.put("size_bytes", file.getSize());
+        ev.put("depth", depth);
+        ev.put("variants_requested", variants);
+        events.info("PROCESS_START", "Принят файл на синхронный расчёт: " + file.getOriginalFilename(), ev);
         JobService.SyncResult r;
         try (InputStream in = file.getInputStream()) {
-            r = jobs.processSync(in, depth);
+            r = jobs.processSync(in, depth, variants);
         }
         if (r.model.diagnostics.hasErrors()) {
+            Map<String, Object> bad = new LinkedHashMap<>(ev);
+            bad.put("errors", r.model.diagnostics.count(ru.intelligence.heatnet.model.Diagnostics.Level.ERROR));
+            events.error("VALIDATION_FAILED", "Входные данные не прошли проверку: " + file.getOriginalFilename(), bad);
             throw new InputValidationException(JobService.diagnosticsMap(r.model.diagnostics));
         }
+        Map<String, Object> done = new LinkedHashMap<>(ev);
+        done.put("variants", r.variants.size());
+        done.put("features_in", r.model.totalFeatures);
+        done.put("connection_points", r.model.points.size());
+        if (!r.variants.isEmpty()) {
+            done.put("best_variant", r.variants.get(0).name);
+            done.put("best_cost", Math.round(r.variants.get(0).calculatedCost));
+            done.put("best_length_m", Math.round(r.variants.get(0).newNetworkLength));
+            done.put("best_score", r.variants.get(0).score);
+        }
+        events.write(ru.intelligence.heatnet.events.EventEntity.Level.INFO, "PROCESS_DONE",
+                "Расчёт выполнен: вариантов " + r.variants.size() + ", " + r.millis + " мс", done, null, r.millis);
         GeoJsonWriter writer = new GeoJsonWriter(r.loader.crs(), r.model.numericIds);
         StreamingResponseBody body = out -> writer.write(r.variants, out);
         Map<String, Object> summary = new LinkedHashMap<>();
@@ -75,6 +100,7 @@ public class ProcessController {
         m.put("method", "POST /api/process — форма multipart/form-data, поле file: входной GeoJSON");
         m.put("example", "curl -F \"file=@contest_dataset.geojson\" http://<host>/api/process -o result.geojson");
         m.put("depth_mode", "POST /api/process?depth=true — дополнительная задача: трассировка с учётом глубины");
+        m.put("variants", "POST /api/process?variants=7 — показать все рассчитанные стратегии (в конкурсной выдаче по умолчанию три)");
         m.put("large_files", "POST /api/jobs — очередь для файлов до 3 ГБ, затем GET /api/jobs/{id}/result");
         m.put("docs", "/swagger-ui.html");
         m.put("rules", "/api/rules/reference, /api/rules/restrictions, /api/rules/routing");

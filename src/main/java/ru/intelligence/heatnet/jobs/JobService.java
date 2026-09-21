@@ -50,10 +50,14 @@ public class JobService {
     private ExecutorService pool;
     private Path storage;
 
-    public JobService(JobRepository repo, RulesService rules, HeatnetProperties props) {
+    private final ru.intelligence.heatnet.events.EventService events;
+
+    public JobService(JobRepository repo, RulesService rules, HeatnetProperties props,
+                      ru.intelligence.heatnet.events.EventService events) {
         this.repo = repo;
         this.rules = rules;
         this.props = props;
+        this.events = events;
     }
 
     @PostConstruct
@@ -96,6 +100,10 @@ public class JobService {
 
     /** Синхронный расчёт для небольших файлов: возвращает варианты и диагностику без очереди. */
     public SyncResult processSync(InputStream in, boolean depth) throws IOException {
+        return processSync(in, depth, 0);
+    }
+
+    public SyncResult processSync(InputStream in, boolean depth, int variants) throws IOException {
         long t0 = System.currentTimeMillis();
         InputLoader loader = new InputLoader(rules);
         InputModel model = loader.load(new BufferedInputStream(in));
@@ -106,7 +114,7 @@ public class JobService {
             r.variants = new ArrayList<>();
             return r;
         }
-        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth);
+        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants);
         r.variants = out.variants;
         r.millis = System.currentTimeMillis() - t0;
         return r;
@@ -142,8 +150,14 @@ public class JobService {
                 return;
             }
             boolean depth = false;
-            try { depth = Boolean.TRUE.equals(json.readValue(j.getOptionsJson() == null ? "{}" : j.getOptionsJson(), Map.class).get("depth")); } catch (Exception ignore) { }
-            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth);
+            int variants = 0;
+            try {
+                Map<?, ?> opts = json.readValue(j.getOptionsJson() == null ? "{}" : j.getOptionsJson(), Map.class);
+                depth = Boolean.TRUE.equals(opts.get("depth"));
+                Object v = opts.get("variants");
+                if (v instanceof Number) variants = ((Number) v).intValue();
+            } catch (Exception ignore) { }
+            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants);
             Path result = storage.resolve("result").resolve(id + ".geojson");
             try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(result), 1 << 16)) {
                 new GeoJsonWriter(loader.crs(), model.numericIds).write(out.variants, os);
@@ -158,7 +172,19 @@ public class JobService {
             j.setComputeMillis(System.currentTimeMillis() - t0);
             j.setDiagnosticsJson(json.writeValueAsString(diagnosticsMap(model.diagnostics)));
             j.setStatus(JobEntity.Status.DONE.name());
+            Map<String, Object> ev = new java.util.LinkedHashMap<>();
+            ev.put("file", j.getOriginalFilename());
+            ev.put("size_bytes", j.getInputSize());
+            ev.put("variants", out.variants.size());
+            ev.put("depth", depth);
+            if (!out.variants.isEmpty()) {
+                ev.put("best_variant", out.variants.get(0).name);
+                ev.put("best_cost", Math.round(out.variants.get(0).calculatedCost));
+                ev.put("best_length_m", Math.round(out.variants.get(0).newNetworkLength));
+            }
+            events.job("JOB_DONE", "Задание рассчитано: вариантов " + out.variants.size(), id, ev, j.getComputeMillis());
         } catch (Exception e) {
+            events.error("JOB_FAILED", "Задание " + id + " завершилось ошибкой: " + e, java.util.Map.of("job_id", id));
             log.error("Задание {} завершилось ошибкой", id, e);
             j.setStatus(JobEntity.Status.FAILED.name());
             j.setErrorText(e.toString());
