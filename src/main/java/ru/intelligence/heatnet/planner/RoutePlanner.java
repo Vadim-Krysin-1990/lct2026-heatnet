@@ -58,6 +58,8 @@ public class RoutePlanner {
         public Double turnPenaltyM = null;
         /** Во сколько раз поворот на 45° дороже прямого угла (косой излом требует неподвижных опор). */
         public double sharpTurnFactor = 1;
+        /** Спрямлять трассу произвольным углом (ТП от 21.09 §2.1: допустим любой поворот до 90°). */
+        public boolean freeAngle = false;
         public String description;
     }
 
@@ -189,7 +191,7 @@ public class RoutePlanner {
                     diag.info("ROUTE_RETRY", "Точка " + cp.id + ": выход №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) ведёт в замкнутый карман — пропущен", cp.id);
                     continue;
                 }
-                AStarRouter router = new AStarRouter(w, cnew, turnPenalty, directions, strategy.sharpTurnFactor);
+                AStarRouter router = new AStarRouter(w, cnew, turnPenalty, directions, strategy.sharpTurnFactor, rr.maxTurnDeg);
                 AStarRouter.Result res = router.route(startCell, exit.direction);
                 if (res == null) {
                     diag.info("ROUTE_RETRY", "Точка " + cp.id + ": из выхода №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) в окне " + w.cols + "×" + w.rows + " пути нет с учётом правил пересечений", cp.id);
@@ -328,6 +330,10 @@ public class RoutePlanner {
         if (exit.corridor.size() > 1 && exit.exitPoint.distance(path.get(0)) > 1e-6) full.add(exit.exitPoint);
         for (Coordinate c : path) if (full.get(full.size() - 1).distance(c) > 1e-6) full.add(c);
         full = mergeCollinear(full);
+        // «шпильки» — микроизломы с поворотом круче 90° на стыке коридора выхода с растровым путём
+        // и на проекции конца на цель; ТП §2.1 такие повороты запрещает
+        full = mergeCollinear(despike(full, rr.despikeMaxM));
+        if (strategy.freeAngle) full = mergeCollinear(PathSimplifier.pullStraight(w, full, 2));
 
         Node leaf = nb.addNode(NodeKind.CONNECTION_POINT, cp.geom.getCoordinate(), cp.id);
         Node end;
@@ -395,6 +401,36 @@ public class RoutePlanner {
     private static Coordinate nearestOn(Geometry g, Coordinate c) {
         Coordinate[] near = org.locationtech.jts.operation.distance.DistanceOp.nearestPoints(g, GeoUtil.point(c));
         return near[0];
+    }
+
+    /**
+     * Снимает «шпильки»: отрезки короче maxSpike, на концах которых трасса разворачивается круче 90°.
+     * Внутренняя шпилька схлопывается в середину, у концов трассы — убирается лишняя вершина
+     * (точка подключения и точка врезки неподвижны).
+     */
+    static List<Coordinate> despike(List<Coordinate> pts, double maxSpike) {
+        List<Coordinate> out = new ArrayList<>(pts);
+        boolean changed = true;
+        int guard = 0;
+        while (changed && guard++ < 100 && out.size() > 2) {
+            changed = false;
+            for (int i = 0; i + 1 < out.size(); i++) {
+                if (out.get(i).distance(out.get(i + 1)) > maxSpike) continue;
+                boolean spike = (i > 0 && PathSimplifier.turnDeg(out.get(i - 1), out.get(i), out.get(i + 1)) > 90 + 1e-6)
+                        || (i + 2 < out.size() && PathSimplifier.turnDeg(out.get(i), out.get(i + 1), out.get(i + 2)) > 90 + 1e-6);
+                if (!spike) continue;
+                if (i == 0) out.remove(1);
+                else if (i + 1 == out.size() - 1) out.remove(i);
+                else {
+                    Coordinate a = out.get(i), b = out.get(i + 1);
+                    out.set(i, new Coordinate((a.x + b.x) / 2, (a.y + b.y) / 2));
+                    out.remove(i + 1);
+                }
+                changed = true;
+                break;
+            }
+        }
+        return out;
     }
 
     private static List<Coordinate> mergeCollinear(List<Coordinate> pts) {

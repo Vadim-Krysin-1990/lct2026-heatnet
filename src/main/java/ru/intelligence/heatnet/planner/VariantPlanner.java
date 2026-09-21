@@ -108,6 +108,14 @@ public class VariantPlanner {
             if (selected.size() >= Math.min(max, rules.routing().orthogonalVariantsInOutput)) break;
             if (v.strategy != null && v.strategy.startsWith("orthogonal") && v.unconnectedOksIds.isEmpty()) selected.add(v);
         }
+        // квота на спрямлённые варианты: короче и дешевле, геометрия дальше от инженерной практики
+        int freeQuota = Math.min(max - selected.size(), rules.routing().freeAngleVariantsInOutput);
+        if (freeQuota > 0) {
+            List<Variant> free = new ArrayList<>();
+            for (Variant v : distinct) if (v.strategy != null && v.strategy.startsWith("free_angle") && v.unconnectedOksIds.isEmpty()) free.add(v);
+            free.sort(Comparator.comparingDouble(v -> v.score));
+            for (Variant v : free) { if (freeQuota-- <= 0) break; if (!selected.contains(v)) selected.add(v); }
+        }
         List<Variant> rest = new ArrayList<>(distinct);
         rest.removeAll(selected);
         rest.sort(Comparator.comparingDouble(v -> v.score));
@@ -175,6 +183,27 @@ public class VariantPlanner {
                 s.directions = 8;
                 s.gridBearingDeg = -1;
                 s.description = "Инженерная трассировка общей сетью: геометрия вдоль застройки, точки объединяются в одно дерево с ветвлениями в камерах — меньше врезок в существующую сеть";
+                break;
+            }
+            case "free_angle_shared": {
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
+                s.sharpTurnFactor = 1;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.freeAngle = true;
+                s.description = "Кратчайшая трассировка со спрямлением: после поиска по сетке трасса спрямляется произвольным углом там, где прямая свободна (ТП от 21.09 §2.1 допускает любой поворот до 90°); точки объединяются в одно дерево";
+                break;
+            }
+            case "free_angle_separate": {
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
+                s.sharpTurnFactor = 1;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.freeAngle = true;
+                s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
+                s.description = "Кратчайшая трассировка со спрямлением, ближние к существующей сети точки получают собственные врезки";
                 break;
             }
             case "shared_tree":

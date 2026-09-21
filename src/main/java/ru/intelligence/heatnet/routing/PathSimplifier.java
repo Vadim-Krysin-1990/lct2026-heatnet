@@ -91,4 +91,55 @@ public final class PathSimplifier {
         }
         return true;
     }
+
+    /**
+     * Спрямление трассы произвольным углом (ТП в редакции от 21.09.2026 §2.1: допустим любой поворот
+     * до 90° включительно, удорожания за «нестандартный» угол больше нет). Вершина снимается, если
+     * прямая между её соседями свободна и повороты в соседних вершинах остаются не круче 90°.
+     * Первые {@code fixedHead} вершин (точка подключения и выход из здания по нормали) не трогаются,
+     * последняя вершина (врезка) — тоже.
+     */
+    public static List<Coordinate> pullStraight(RasterWindow w, List<Coordinate> pts, int fixedHead) {
+        List<Coordinate> out = new ArrayList<>(pts);
+        boolean changed = true;
+        int guard = 0;
+        while (changed && guard++ < 200) {
+            changed = false;
+            for (int i = Math.max(1, fixedHead); i + 1 < out.size(); i++) {
+                Coordinate a = out.get(i - 1), c = out.get(i + 1);
+                if (!segmentFree(w, a, c)) continue;
+                if (i - 2 >= 0 && turnDeg(out.get(i - 2), a, c) > 90 + 1e-6) continue;
+                if (i + 2 < out.size() && turnDeg(a, c, out.get(i + 2)) > 90 + 1e-6) continue;
+                out.remove(i);
+                changed = true;
+                break;
+            }
+        }
+        return out;
+    }
+
+    /** Поворот в вершине b в градусах: 0 — прямо, 90 — прямой угол. */
+    public static double turnDeg(Coordinate a, Coordinate b, Coordinate c) {
+        double b1 = Math.atan2(b.y - a.y, b.x - a.x), b2 = Math.atan2(c.y - b.y, c.x - b.x);
+        double d = Math.toDegrees(b2 - b1);
+        d = ((d + 180) % 360 + 360) % 360 - 180;
+        return Math.abs(d);
+    }
+
+    /** Свободен ли отрезок произвольного направления: выборка с шагом полклетки по маске и зонам. */
+    static boolean segmentFree(RasterWindow w, Coordinate a, Coordinate b) {
+        double len = a.distance(b);
+        if (len < 1e-9) return true;
+        int n = (int) Math.ceil(len / (w.step * 0.5));
+        short z0 = w.zone[w.idx(w.colOf(a.x, a.y), w.rowOf(a.x, a.y))];
+        for (int i = 0; i <= n; i++) {
+            double t = (double) i / n;
+            double x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+            int c = w.colOf(x, y), r = w.rowOf(x, y);
+            if (!w.inside(c, r) || w.blocked[w.idx(c, r)]) return false;
+            short z = w.zone[w.idx(c, r)];
+            if (z != z0 && z != 0) return false;   // в спецзону срезкой не заходим: угол пересечения там нормируется
+        }
+        return true;
+    }
 }

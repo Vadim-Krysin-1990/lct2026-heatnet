@@ -5,42 +5,137 @@
 <title>heatnet — просмотр результата трассировки</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="lib/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
 <style>
-  html, body { height: 100%; margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c1d22; }
-  #app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
-  #panel { padding: 14px 16px; overflow: auto; border-right: 1px solid #e3e3e8; background: #fafafc; }
-  #map { height: 100%; background: #f4f4f6; }
-  h1 { font-size: 17px; margin: 0 0 10px; }
-  h2 { font-size: 13px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: #555; }
-  .drop { border: 2px dashed #b8b8c4; border-radius: 10px; padding: 12px; text-align: center; color: #555; margin-bottom: 8px; background: #fff; }
-  .drop.over { border-color: #ff0053; background: #fff5f8; }
-  .drop input { display: block; margin: 8px auto 0; }
-  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  button, select { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid #c9c9d2; background: #fff; cursor: pointer; }
-  button.active { background: #310f53; color: #fff; border-color: #310f53; }
+  /* Оформление повторяет городские цифровые сервисы: шрифт Golos Text как на mos.ru,
+     нейтральные поверхности, один акцент. Переключатель бренда меняет только акцент и шапку,
+     цвета объектов на карте остаются смысловыми. Логотипы заказчиков не используются. */
+  :root {
+    --ink: #0e0e0f;  --muted: #82888a;  --paper: #ffffff;  --panel: #f7f7f8;  --line: #e4e7e7;
+    --accent: #650003;            /* mos.ru: фирменный тёмно-вишнёвый */
+    --accent-soft: #f4ecec;
+    --link: #0848c0;
+    --brand-name: "Москва · городские сервисы";
+    --net-existing: #8c1d18;      /* существующая сеть */
+    --net-new: #0072ba;           /* новая сеть */
+    --net-special: #ff7502;       /* специальный проход */
+    --point: #1f8a4c;             /* точки подключения */
+  }
+  :root[data-brand="moek"] {
+    --accent: #0072ba; --accent-soft: #e8f3fb; --link: #0072ba;
+    --net-existing: #e55356; --net-new: #0072ba; --net-special: #ff7502;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eceeee; --muted: #9aa0a2; --paper: #131416; --panel: #1b1d1f; --line: #2c2f31;
+      --accent-soft: #241a1a; --link: #7aa7ff;
+    }
+    :root:not([data-theme="light"])[data-brand="moek"] { --accent: #239ae7; --accent-soft: #10222e; --link: #239ae7; }
+    :root:not([data-theme="light"]):not([data-brand="moek"]) { --accent: #d4726f; }
+  }
+  html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink);
+    font: 14px/1.45 "Golos Text", -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  #app { display: grid; grid-template-columns: 384px 1fr; height: 100%; }
+  #panel { overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
+  .brandbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px 12px;
+    background: var(--accent); color: #fff; position: sticky; top: 0; z-index: 5; }
+  .brandbar .mark { width: 26px; height: 26px; border-radius: 6px; background: #fff; color: var(--accent);
+    display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+  .brandbar b { font-weight: 600; font-size: 15px; letter-spacing: .01em; }
+  .brandbar .sub { margin-left: auto; font-size: 11px; opacity: .85; }
+  .content { padding: 16px 18px 24px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+  h2 { font-size: 11px; font-weight: 600; margin: 20px 0 8px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--muted); }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); }
+  .switch button { border: 0; background: transparent; padding: 6px 12px; font: inherit; font-size: 12.5px;
+    color: var(--ink); cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .drop { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; text-align: center;
+    color: var(--muted); background: var(--paper); margin-bottom: 8px; font-size: 12.5px; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop input { display: block; margin: 8px auto 0; font-size: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, select { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  td { padding: 3px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td { padding: 5px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
   td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .legend span { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 6px; }
+  tr:last-child td { border-bottom: 0; }
+  .legend div { margin: 3px 0; }
+  .legend span { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 8px; border-radius: 2px; }
   .legend .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .legend .sq { width: 10px; height: 10px; }
-  .muted { color: #777; font-size: 12px; }
-  label.chk { display: block; margin: 2px 0; }
-  .leaflet-tooltip.dn { background: rgba(255,255,255,.85); border: none; box-shadow: none; font-size: 10px; padding: 1px 3px; color: #1f4e79; }
+  .legend .sq { width: 10px; height: 10px; border-radius: 2px; }
+  label.chk { display: block; margin: 3px 0; font-size: 13px; }
+  .leaflet-tooltip.dn { background: rgba(255,255,255,.9); border: none; box-shadow: none;
+    font-size: 10px; padding: 1px 4px; color: #123; font-family: "Golos Text", sans-serif; }
+  .leaflet-tooltip.money { font-weight: 600; color: #0b3d62; }
+
+  /* поворот карты «как в навигаторе»: вращается само полотно, подписи и значки — обратно */
+  #mapwrap { position: relative; overflow: hidden; height: 100%; background: #eceeee; }
+  #map { position: absolute; transform-origin: 50% 50%; transform: rotate(var(--rot, 0deg)); }
+  .up { display: inline-block; transform: rotate(calc(-1 * var(--rot, 0deg))); transform-origin: 50% 50%; }
+  .leaflet-popup-content-wrapper { transform: rotate(calc(-1 * var(--rot, 0deg))); }
+  .rotated .leaflet-popup-tip-container { display: none; }
+
+  .compass { position: absolute; right: 14px; top: 14px; z-index: 600; width: 46px; height: 46px;
+    border-radius: 50%; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    padding: 0; display: grid; place-items: center; cursor: grab; box-shadow: 0 2px 10px rgba(0,0,0,.18);
+    touch-action: none; }
+  .compass:active { cursor: grabbing; }
+  .compass[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 10px rgba(0,0,0,.18); }
+  .compass svg { width: 30px; height: 30px; transform: rotate(var(--rot, 0deg)); }
+  .compass .deg { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .zoombox { position: absolute; right: 14px; top: 78px; z-index: 600; display: grid; gap: 4px; }
+  .zoombox button { width: 34px; height: 34px; padding: 0; font-size: 17px; line-height: 1;
+    border-radius: 9px; box-shadow: 0 2px 8px rgba(0,0,0,.14); }
+  .attrib { position: absolute; right: 8px; bottom: 6px; z-index: 600; font-size: 10.5px; color: var(--muted);
+    background: color-mix(in srgb, var(--paper) 80%, transparent); padding: 1px 5px; border-radius: 5px; }
+  .inspect { position: absolute; left: 14px; bottom: 14px; z-index: 600; width: 288px; max-width: calc(100% - 28px);
+    background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.16); font-size: 12.5px; }
+  .inspect h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+  .inspect .kind { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .inspect .big { font-size: 19px; font-weight: 600; margin: 6px 0 4px; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .inspect .share { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-bottom: 8px; }
+  .inspect .share i { display: block; height: 100%; background: var(--accent); }
+  .inspect table td { padding: 3px 2px; font-size: 12px; }
+  .inspect .pin { position: absolute; right: 8px; top: 6px; border: 0; background: transparent; color: var(--muted);
+    font-size: 16px; line-height: 1; padding: 4px; cursor: pointer; }
   #notes { font-size: 12px; color: #a33; white-space: pre-wrap; }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }
+    #panel { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="panel">
-    <h1>heatnet · просмотр результата</h1>
-    <div class="muted">Команда Intelligence, ЛЦТ 2026, задача №2. Просмотрщик не входит в оцениваемый сервис — он для самопроверки и питча.</div>
+    <div class="brandbar"><div class="mark" id="brandMark">М</div><b id="brandTitle">Москва · городские сервисы</b><span class="sub">heatnet</span></div>
+    <div class="content">
+    <h1>Трассы подключения к тепловым сетям</h1>
+    <div class="muted">Предварительная трассировка для технологического присоединения: места присоединения,
+      новые камеры, условные диаметры и стоимость. Расчёт выполняет сервис, страница только показывает результат.</div>
+
+    <h2>Оформление</h2>
+    <div class="switch" role="group" aria-label="Фирменный стиль">
+      <button type="button" id="brandMos" aria-pressed="true">Москва · ДИТ</button>
+      <button type="button" id="brandMoek" aria-pressed="false">МОЭК</button>
+    </div>
 
     <h2>Файлы</h2>
     <div class="drop" id="dropIn">Входной GeoJSON (датасет)<input type="file" id="fileIn" accept=".geojson,.json"></div>
     <div class="drop" id="dropOut">Результат сервиса (GeoJSON)<input type="file" id="fileOut" accept=".geojson,.json"></div>
     <div class="row">
       <label class="chk"><input type="checkbox" id="osm"> подложка OpenStreetMap (нужен интернет)</label>
+      <label class="chk"><input type="checkbox" id="money"> подписи стоимости на новых участках</label>
     </div>
 
     <h2>Вариант</h2>
@@ -53,25 +148,149 @@
 
     <h2>Легенда</h2>
     <div class="legend">
-      <div><span style="background:#d62728"></span>существующая сеть (подпись id/ДУ)</div>
-      <div><span style="background:#1f77b4"></span>новый участок, обычная прокладка (подпись ДУ)</div>
-      <div><span style="background:#ff7f0e"></span>новый участок, специальный проход</div>
-      <div><span style="background:#e377c2;height:8px"></span>реконструкция существующего участка</div>
-      <div><span class="dot" style="background:#2ca02c"></span>точка подключения ОКС (расход, т/ч)</div>
-      <div><span class="sq" style="background:#d62728"></span>существующая камера · <span class="sq" style="background:#1f77b4"></span>новая камера</div>
-      <div><span class="dot" style="background:#9467bd"></span>врезка · <span class="dot" style="background:#111;width:6px;height:6px"></span>технический узел</div>
-      <div><span class="sq" style="background:#c8c8c8"></span>ОКС · <span class="sq" style="background:#9ecae1"></span>вода · <span class="sq" style="background:#f0c070"></span>ж/д, трамвай · <span class="sq" style="background:#d9d9d9;border:1px solid #888"></span>дорога</div>
+      <div><span style="background:var(--net-existing)"></span>существующая тепловая сеть (подпись id/ДУ)</div>
+      <div><span style="background:var(--net-new)"></span>новый участок, обычная прокладка (подпись ДУ)</div>
+      <div><span style="background:var(--net-special)"></span>новый участок, специальный проход</div>
+      <div><span class="dot" style="background:var(--point)"></span>точка подключения ОКС (расход, т/ч)</div>
+      <div><span class="sq" style="background:var(--net-existing)"></span>существующая камера · <span class="sq" style="background:var(--net-new)"></span>новая камера</div>
+      <div><span class="dot" style="background:#111;width:6px;height:6px"></span>технический узел</div>
+      <div><span class="sq" style="background:#c8c8c8"></span>ОКС · <span class="sq" style="background:#9ecae1"></span>вода · <span class="sq" style="background:#f0c070"></span>железная дорога</div>
     </div>
   </div>
-  <div id="map"></div>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <button type="button" class="compass" id="compass" aria-pressed="false"
+            title="Компас: тянуть — повернуть карту, клик — вернуть на север">
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-opacity=".25"/>
+        <polygon points="20,4 25,21 20,17 15,21" fill="#c0392b"/>
+        <polygon points="20,36 15,19 20,23 25,19" fill="currentColor" fill-opacity=".55"/>
+      </svg>
+      <span class="deg" id="compassDeg">С</span>
+    </button>
+    <div class="zoombox">
+      <button type="button" id="zoomIn" aria-label="Приблизить">+</button>
+      <button type="button" id="zoomOut" aria-label="Отдалить">−</button>
+    </div>
+    <div class="attrib" id="attrib" hidden>© OpenStreetMap</div>
+    <div class="inspect" id="inspect" hidden></div>
+  </div>
 </div>
 
 <script src="lib/leaflet.js"></script>
 <script>
 (function () {
-  const map = L.map('map', { preferCanvas: true }).setView([55.699, 37.640], 15);
+  // ---------- фирменный стиль заказчика ----------
+  const brands = {
+    mos:  { mark: 'М', title: 'Москва · городские сервисы' },
+    moek: { mark: 'МОЭК', title: 'МОЭК · тепловые сети Москвы' }
+  };
+  function setBrand(name) {
+    document.documentElement.setAttribute('data-brand', name);
+    document.getElementById('brandMark').textContent = brands[name].mark;
+    document.getElementById('brandMark').style.fontSize = name === 'moek' ? '8px' : '15px';
+    document.getElementById('brandTitle').textContent = brands[name].title;
+    document.getElementById('brandMos').setAttribute('aria-pressed', String(name === 'mos'));
+    document.getElementById('brandMoek').setAttribute('aria-pressed', String(name === 'moek'));
+    try { localStorage.setItem('heatnet.brand', name); } catch (e) { /* приватный режим */ }
+  }
+  document.getElementById('brandMos').addEventListener('click', () => setBrand('mos'));
+  document.getElementById('brandMoek').addEventListener('click', () => setBrand('moek'));
+  let savedBrand = 'mos';
+  try { savedBrand = localStorage.getItem('heatnet.brand') || 'mos'; } catch (e) { /* нет доступа к хранилищу */ }
+  setBrand(brands[savedBrand] ? savedBrand : 'mos');
+
+  const wrap = document.getElementById('mapwrap'), mapEl = document.getElementById('map');
+  let rot = 0, canvasSize = 0;
+  // полотно карты — квадрат по диагонали окна, чтобы при повороте не открывались углы
+  function layout() {
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    canvasSize = Math.ceil(Math.hypot(w, h));
+    mapEl.style.width = mapEl.style.height = canvasSize + 'px';
+    mapEl.style.left = Math.round((w - canvasSize) / 2) + 'px';
+    mapEl.style.top = Math.round((h - canvasSize) / 2) + 'px';
+    if (window._hnMap) window._hnMap.invalidateSize({ animate: false });
+  }
+  layout();
+
+  const map = L.map('map', { preferCanvas: true, zoomControl: false, attributionControl: false }).setView([55.699, 37.640], 15);
+  window._hnMap = map;
+  window.addEventListener('resize', layout);
   const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
-  document.getElementById('osm').addEventListener('change', e => e.target.checked ? osm.addTo(map) : map.removeLayer(osm));
+  document.getElementById('osm').addEventListener('change', e => {
+    e.target.checked ? osm.addTo(map) : map.removeLayer(osm);
+    document.getElementById('attrib').hidden = !e.target.checked;
+  });
+  document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
+  document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
+
+  // ---------- компас: карта крутится как в навигаторе ----------
+  const compass = document.getElementById('compass'), degEl = document.getElementById('compassDeg');
+  function setRot(deg) {
+    rot = ((deg % 360) + 360) % 360;
+    document.documentElement.style.setProperty('--rot', rot.toFixed(2) + 'deg');
+    const turned = rot > 0.5 && rot < 359.5;
+    document.body.classList.toggle('rotated', turned);
+    compass.setAttribute('aria-pressed', String(turned));
+    degEl.textContent = turned ? Math.round(rot) + '°' : 'С';
+    // при повороте колесо масштабирует от центра: курсор в повёрнутой системе сбивает привычное поведение
+    map.options.scrollWheelZoom = turned ? 'center' : true;
+  }
+  setRot(0);
+
+  // экранные координаты → точка полотна с учётом поворота (иначе Leaflet промахивается по объектам)
+  const origMousePos = L.DomEvent.getMousePosition;
+  L.DomEvent.getMousePosition = function (e, container) {
+    if (container && (container === mapEl || mapEl.contains(container))) {
+      const r = mapEl.getBoundingClientRect();
+      const a = -rot * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+      const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      return new L.Point(dx * cos - dy * sin + canvasSize / 2, dx * sin + dy * cos + canvasSize / 2);
+    }
+    return origMousePos.call(this, e, container);
+  };
+
+  // перетаскивание карты ведём сами: экранный сдвиг разворачиваем обратно на угол поворота
+  map.dragging.disable();
+  let pan = null, spin = null;
+  wrap.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !e.isPrimary || e.target.closest('.compass, .inspect')) return;
+    if (e.shiftKey) { spin = { cx: 0, cy: 0, a0: 0, start: rot }; startSpin(e, wrap); return; }
+    pan = { x: e.clientX, y: e.clientY };
+  });
+  function startSpin(e, el) {
+    const r = el.getBoundingClientRect();
+    spin.cx = r.left + r.width / 2; spin.cy = r.top + r.height / 2;
+    spin.a0 = Math.atan2(e.clientY - spin.cy, e.clientX - spin.cx);
+    spin.moved = false;
+  }
+  window.addEventListener('pointermove', e => {
+    if (spin) {
+      const a = Math.atan2(e.clientY - spin.cy, e.clientX - spin.cx);
+      const d = (a - spin.a0) * 180 / Math.PI;
+      if (Math.abs(d) > 1.5) spin.moved = true;
+      setRot(spin.start + d);
+      return;
+    }
+    if (!pan) return;
+    const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+    if (Math.abs(dx) + Math.abs(dy) < 1) return;
+    const a = -rot * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+    map.panBy([-(dx * cos - dy * sin), -(dx * sin + dy * cos)], { animate: false });
+    pan.x = e.clientX; pan.y = e.clientY;
+  });
+  window.addEventListener('pointerup', () => { pan = null; });
+  compass.addEventListener('pointerdown', e => {
+    spin = { start: rot };
+    startSpin(e, compass);
+    compass.setPointerCapture(e.pointerId);
+  });
+  compass.addEventListener('pointerup', () => { const turned = spin && spin.moved; spin = null; if (!turned) setRot(0); });
+  compass.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { setRot(rot - 5); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { setRot(rot + 5); e.preventDefault(); }
+    if (e.key === 'Home') { setRot(0); e.preventDefault(); }
+  });
 
   const groups = {};        // name -> L.LayerGroup
   const layerToggles = document.getElementById('layers');
@@ -87,10 +306,96 @@
     return groups[name];
   }
   function popup(props) {
-    return '<table>' + Object.entries(props).map(([k, v]) => `<tr><td>${k}</td><td>${Array.isArray(v) ? v.join(', ') : (v === null ? '—' : v)}</td></tr>`).join('') + '</table>';
+    return '<table>' + Object.entries(props)
+      .map(([k, v]) => `<tr><td>${fieldRu[k] || k}</td><td>${valueRu(k, v)}</td></tr>`).join('') + '</table>';
   }
   const fmt = n => n === undefined || n === null ? '—' : Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 1 });
-  const fmtM = n => (Number(n) / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млн ₽';
+  // финансовый формат: разряды по три знака, две копейки, знак рубля
+  const rub = n => n == null || n === '' ? '—' : Number(n).toLocaleString('ru-RU',
+    { style: 'currency', currency: 'RUB', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtM = rub, fmtRub = rub;
+  const up = html => '<span class="up">' + html + '</span>';
+
+  // ---------- русские названия типов и атрибутов ----------
+  const typeRu = {
+    heat_network: 'Участок тепловой сети', heat_chamber: 'Тепловая камера',
+    heat_network_reconstruction: 'Реконструкция участка', heat_chamber_reconstruction: 'Реконструкция камеры',
+    technical_node: 'Технический узел', tie_in: 'Врезка в существующую сеть',
+    oks_connection_point: 'Точка подключения ОКС', source: 'Источник тепловой энергии',
+    restriction: 'Ограничение', oks: 'Объект капитального строительства',
+    oks_future: 'Объект капитального строительства (планируемый)',
+    oks_existing: 'Объект капитального строительства (существующий)',
+    variant_summary: 'Сводка по варианту'
+  };
+  const restrictionRu = {
+    oks: 'здание (ОКС)', oks_future: 'здание (планируемое)', oks_existing: 'здание (существующее)',
+    road: 'автомобильная дорога', tram_tracks: 'трамвайные пути', railway: 'железная дорога',
+    gas_pipeline: 'газопровод', power_cable: 'силовой кабель', water: 'водный объект',
+    park: 'парк, зелёная зона', social_area: 'социальный объект', prohibited_site: 'запретная территория',
+    heat_network: 'существующая тепловая сеть'
+  };
+  const fieldRu = {
+    id: 'Идентификатор', object_type: 'Тип объекта', restriction_type: 'Вид ограничения',
+    variant_id: 'Вариант', rank: 'Место', score: 'Показатель S', diameter: 'Условный диаметр, ДУ',
+    length: 'Длина, м', flow_tph: 'Расчётный расход, т/ч', heat_load: 'Тепловая нагрузка, Гкал/ч',
+    cost: 'Стоимость', laying_method: 'Способ прокладки', depth_start: 'Глубина в начале, м',
+    depth_end: 'Глубина в конце, м', start_node_id: 'Начальный узел', end_node_id: 'Конечный узел',
+    upstream_object_id: 'Вышестоящий объект', oks_id: 'ОКС', name: 'Наименование',
+    construction_cost: 'Стоимость строительства', chamber_construction_cost: 'Стоимость новых камер',
+    existing_chamber_tie_in_count: 'Врезок в существующие камеры', existing_chamber_tie_in_cost: 'Стоимость врезок',
+    unconnected_penalty: 'Штраф за неподключённые', calculated_cost: 'Итоговая расчётная стоимость',
+    new_network_length: 'Длина новой сети, м', unconnected_oks_ids: 'Неподключённые точки'
+  };
+  const moneyField = k => /cost|penalty/.test(k);
+  const valueRu = (k, v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (Array.isArray(v)) return v.length ? v.join(', ') : 'нет';
+    if (k === 'object_type') return typeRu[v] || v;
+    if (k === 'restriction_type') return restrictionRu[v] || v;
+    if (k === 'laying_method') return v === 'special' ? 'специальный проход' : 'обычная прокладка';
+    if (moneyField(k)) return rub(v);
+    return v;
+  };
+
+  // ---------- карточка объекта: стоимость элемента трассы ----------
+  const inspectEl = document.getElementById('inspect');
+  let pinned = null, variantTotal = 0;
+  const kindName = { heat_network: 'Участок новой тепловой сети', heat_chamber: 'Новая тепловая камера',
+    technical_node: 'Технический узел', tie_in: 'Врезка в существующую сеть',
+    heat_network_reconstruction: 'Реконструкция участка' };
+  function elementCost(p) {
+    if (p.cost != null) return Number(p.cost);
+    return null;
+  }
+  function inspectHtml(p) {
+    const cost = elementCost(p);
+    const share = cost != null && variantTotal > 0 ? Math.min(100, cost / variantTotal * 100) : 0;
+    const rows = [];
+    if (p.diameter != null) rows.push(['Условный диаметр', 'ДУ ' + p.diameter]);
+    if (p.length != null) rows.push(['Длина (гориз. проекция)', fmt(p.length) + ' м']);
+    if (p.flow_tph != null) rows.push(['Расчётный расход', fmt(p.flow_tph) + ' т/ч']);
+    if (p.laying_method) rows.push(['Способ прокладки', valueRu('laying_method', p.laying_method)]);
+    if (p.depth_start != null) rows.push(['Глубина, начало → конец', p.depth_start + ' → ' + p.depth_end + ' м']);
+    if (p.length && cost != null) rows.push(['Удельная стоимость', rub(cost / p.length) + '/м']);
+    if (p.start_node_id != null) rows.push(['Узлы', p.start_node_id + ' → ' + p.end_node_id]);
+    return `<button class="pin" id="inspectClose" title="Закрыть" aria-label="Закрыть">×</button>
+      <div class="kind">${kindName[p.object_type] || typeRu[p.object_type] || p.object_type}</div>
+      <h3>${p.id}</h3>
+      <div class="big">${cost != null ? fmtRub(cost) : 'стоимость не задана'}</div>
+      <div class="share"><i style="width:${share.toFixed(1)}%"></i></div>
+      <div class="muted" style="margin:-4px 0 8px">${cost != null && variantTotal ? share.toFixed(1) + '% итоговой стоимости варианта' : ''}</div>
+      <table>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>`;
+  }
+  function showInspect(p, pin) {
+    if (pinned && !pin) return;
+    inspectEl.innerHTML = inspectHtml(p);
+    inspectEl.hidden = false;
+    if (pin) pinned = p.id;
+    const c = document.getElementById('inspectClose');
+    if (c) c.addEventListener('click', () => { pinned = null; inspectEl.hidden = true; });
+  }
+  function hideInspect() { if (!pinned) inspectEl.hidden = true; }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { pinned = null; inspectEl.hidden = true; } });
 
   // ---------- входные данные ----------
   let inputBounds = null;
@@ -116,17 +421,17 @@
       },
       pointToLayer: (f, ll) => {
         const p = f.properties;
-        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="width:10px;height:10px;background:#d62728;border:1px solid #fff"></div>', iconSize: [10, 10] }) });
-        if (p.object_type === 'source') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="font-size:22px;line-height:22px">★</div>', iconSize: [22, 22] }) });
+        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="up" style="width:10px;height:10px;background:#d62728;border:1px solid #fff"></div>', iconSize: [10, 10] }) });
+        if (p.object_type === 'source') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="up" style="font-size:22px;line-height:22px">★</div>', iconSize: [22, 22] }) });
         if (p.object_type === 'oks_connection_point') return L.circleMarker(ll, { radius: 6, color: '#111', weight: 1, fillColor: '#2ca02c', fillOpacity: 1 });
         return L.circleMarker(ll, { radius: 4 });
       },
       onEachFeature: (f, layer) => {
         const p = f.properties;
         layer.bindPopup(popup(p));
-        if (p.object_type === 'heat_network') layer.bindTooltip(`${p.id}/${p.diameter}`, { permanent: true, direction: 'center', className: 'dn' });
-        if (p.object_type === 'oks_connection_point') layer.bindTooltip(`${p.id} (${p.flow_tph})`, { permanent: true, direction: 'right', className: 'dn' });
-        if (p.object_type === 'heat_chamber') layer.bindTooltip(String(p.id), { permanent: true, direction: 'right', className: 'dn' });
+        if (p.object_type === 'heat_network') layer.bindTooltip(up(`Сеть ${p.id} · ДУ${p.diameter}`), { permanent: true, direction: 'center', className: 'dn' });
+        if (p.object_type === 'oks_connection_point') layer.bindTooltip(up(`Точка ${p.id} · ${fmt(p.flow_tph)} т/ч`), { permanent: true, direction: 'right', className: 'dn' });
+        if (p.object_type === 'heat_chamber') layer.bindTooltip(up('Камера ' + p.id), { permanent: true, direction: 'right', className: 'dn' });
         const t = p.object_type === 'restriction' ? ((p.restriction_type || '').startsWith('oks') ? gOks : gRestr)
               : p.object_type === 'heat_network' ? gNet : p.object_type === 'heat_chamber' ? gCh
               : p.object_type === 'oks_connection_point' ? gPts : p.object_type === 'source' ? gSrc : gOks;
@@ -152,8 +457,22 @@
     });
     if (ids.length) showVariant(ids[0]);
   }
+  let costLabels = [];
+  const moneyBox = document.getElementById('money');
+  moneyBox.addEventListener('change', applyCostLabels);
+  function applyCostLabels() {
+    costLabels.forEach(l => {
+      const t = l.getTooltip();
+      if (!t) return;
+      l.unbindTooltip();
+      l.bindTooltip(t.getContent(), { direction: 'center', className: 'dn money', permanent: moneyBox.checked, sticky: !moneyBox.checked });
+      if (moneyBox.checked) l.openTooltip();
+    });
+  }
   function showVariant(id) {
     current = id;
+    costLabels = [];
+    pinned = null; inspectEl.hidden = true;
     document.querySelectorAll('#variants button').forEach(b => b.classList.toggle('active', b.textContent.endsWith(' ' + id)));
     ['rnet', 'rspecial', 'rrecon', 'rtie', 'rch', 'rnode'].forEach(n => groups[n] && groups[n].clearLayers());
     const gNet = group('rnet', 'новая сеть'), gSp = group('rspecial', 'спецпроходы'), gRec = group('rrecon', 'реконструкция'),
@@ -170,18 +489,26 @@
       pointToLayer: (f, ll) => {
         const p = f.properties;
         if (p.object_type === 'tie_in') return L.circleMarker(ll, { radius: 7, color: '#111', weight: 1, fillColor: '#9467bd', fillOpacity: 1 });
-        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div style="width:11px;height:11px;background:#1f77b4;border:1px solid #fff;transform:rotate(45deg)"></div>', iconSize: [11, 11] }) });
+        if (p.object_type === 'heat_chamber') return L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="up"><div style="width:11px;height:11px;background:#1f77b4;border:1px solid #fff;transform:rotate(45deg)"></div></div>', iconSize: [11, 11] }) });
         if (p.object_type === 'heat_chamber_reconstruction') return L.circleMarker(ll, { radius: 9, color: '#e377c2', weight: 3, fill: false });
         if (p.object_type === 'technical_node') return L.circleMarker(ll, { radius: 3, color: '#111', fillColor: '#111', fillOpacity: 1 });
         return L.circleMarker(ll, { radius: 4 });
       },
       onEachFeature: (f, layer) => {
         const p = f.properties;
-        layer.bindPopup(popup(p));
+        // наведение и клик по элементу новой трассы показывают его стоимость
+        layer.on('mouseover', () => showInspect(p, false));
+        layer.on('mouseout', hideInspect);
+        layer.on('click', e => { L.DomEvent.stopPropagation(e); showInspect(p, true); });
         if (p.object_type === 'heat_network') {
           const depth = p.depth_start != null ? ` · ${p.depth_start}→${p.depth_end} м` : '';
-          layer.bindTooltip(`ДУ${p.diameter} · ${fmt(p.flow_tph)} т/ч · ${fmt(p.length)} м${depth}`, { direction: 'center', className: 'dn', permanent: false });
+          layer.bindTooltip(up(`Участок сети ДУ${p.diameter} · ${fmt(p.length)} м · <b>${rub(p.cost)}</b>${depth}`),
+            { direction: 'center', className: 'dn money', permanent: false, sticky: true });
+          costLabels.push(layer);
           (p.laying_method === 'special' ? gSp : gNet).addLayer(layer);
+        } else if (p.object_type === 'heat_chamber' && p.cost != null) {
+          layer.bindTooltip(up(`Тепловая камера ДУ${p.diameter} · <b>${rub(p.cost)}</b>`), { direction: 'right', className: 'dn money' });
+          gCh.addLayer(layer);
         } else if (p.object_type === 'heat_network_reconstruction') gRec.addLayer(layer);
         else if (p.object_type === 'tie_in') gTie.addLayer(layer);
         else if (p.object_type === 'heat_chamber' || p.object_type === 'heat_chamber_reconstruction') gCh.addLayer(layer);
@@ -189,6 +516,8 @@
       }
     });
     feats.forEach(f => { if (f.properties.object_type === 'variant_summary') summary = f.properties; });
+    variantTotal = summary && summary.calculated_cost ? Number(summary.calculated_cost) : 0;
+    applyCostLabels();
     const counts = t => feats.filter(f => f.properties.object_type === t).length;
     const s = summary || {};
     document.getElementById('summary').innerHTML = `<table>

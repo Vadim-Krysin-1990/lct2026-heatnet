@@ -11,7 +11,8 @@ import java.util.PriorityQueue;
 
 /**
  * A* по 8 направлениям с состоянием (клетка, направление): стоимость шага = длина × cost/м × Kспец(клетка)
- * + штраф за поворот (45° — базовый, 90° — двойной, 135° — тройной; развороты запрещены).
+ * + штраф за поворот (45° — базовый, 90° — двойной). Повороты круче 90° запрещены (ТП от 21.09 §2.1):
+ * изменение направления на 135° набирается двумя поворотами в соседних клетках.
  * Внутри спецзоны повороты запрещены (спецучасток — прямой), вход в зону с осью — только под углом ≥ min_angle.
  * Цели — клетки с goalKind; завершение в цели добавляет её терминальную стоимость (врезка, камера),
  * поэтому первая извлечённая «финишная» вершина — глобально дешёвая с учётом стоимости присоединения.
@@ -43,20 +44,23 @@ public class AStarRouter {
      * для тепловой сети хуже прямого угла, а не лучше.
      */
     private final double sharpTurnFactor;
+    /** Предельный поворот в шагах по 45°: ТП от 21.09 §2.1 запрещает повороты круче 90°, т.е. 2 шага. */
+    private final int maxTurnSteps;
 
     public AStarRouter(RasterWindow w, double costPerM, double turnPenaltyM) {
-        this(w, costPerM, turnPenaltyM, 8, 1);
+        this(w, costPerM, turnPenaltyM, 8, 1, 90);
     }
 
-    public AStarRouter(RasterWindow w, double costPerM, double turnPenaltyM, int directions, double sharpTurnFactor) {
+    public AStarRouter(RasterWindow w, double costPerM, double turnPenaltyM, int directions, double sharpTurnFactor, double maxTurnDeg) {
         this.w = w;
         this.costPerM = costPerM;
         this.turnPenaltyM = turnPenaltyM;
         this.dirStep = directions <= 4 ? 2 : 1;
         this.sharpTurnFactor = sharpTurnFactor;
+        this.maxTurnSteps = Math.max(1, (int) Math.floor(maxTurnDeg / 45.0 + 1e-9));
     }
 
-    /** Вес поворота: 45° — sharpTurnFactor, 90° — 2, 135° — 3 (как доля базового штрафа). */
+    /** Вес поворота: 45° — sharpTurnFactor, 90° — 2 (как доля базового штрафа). */
     private double turnWeight(int turn) {
         if (turn == 0) return 0;
         if (turn == 1) return sharpTurnFactor;
@@ -119,7 +123,7 @@ public class AStarRouter {
             short zHere = w.zone[cell];
             for (int nd = dir % dirStep; nd < 8; nd += dirStep) {
                 int turn = Math.abs(nd - dir); if (turn > 4) turn = 8 - turn;
-                if (turn == 4) continue;
+                if (turn > maxTurnSteps) continue;   // ТП §2.1: поворот круче 90° запрещён (и разворот тоже)
                 if (zHere != 0 && turn != 0) continue;
                 int nc = c + DC[nd], nr = r + DR[nd];
                 if (!w.inside(nc, nr)) continue;
