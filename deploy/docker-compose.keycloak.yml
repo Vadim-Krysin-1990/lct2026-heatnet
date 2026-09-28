@@ -3,7 +3,7 @@
 #   KEYCLOAK_PUBLIC_URL=http://<адрес стенда>:8081 \
 #   docker-compose -f docker-compose.yml -f deploy/docker-compose.stand.yml -f deploy/docker-compose.keycloak.yml up -d --build
 #
-# Realm, клиент, три роли и три пользователя заводятся автоматически из deploy/keycloak/realm-heatnet.json,
+# Realm, клиент, три роли и три пользователя заводятся автоматически из deploy/keycloak/realm-catp.json,
 # руками в админке настраивать нечего. Консоль администратора — порт KEYCLOAK_PORT (по умолчанию 8081),
 # логин admin/admin (меняется переменными).
 #
@@ -34,10 +34,10 @@ services:
   app:
     environment:
       HEATNET_SECURITY_ENABLED: "true"
-      HEATNET_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/heatnet
-      HEATNET_OIDC_CLIENT_ID: heatnet-viewer
+      HEATNET_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/catp
+      HEATNET_OIDC_CLIENT_ID: catp-web
       # ключи забираем по имени сервиса внутри compose: внешний адрес из контейнера может быть недоступен
-      HEATNET_OIDC_JWKS: http://keycloak:8080/realms/heatnet/protocol/openid-connect/certs
+      HEATNET_OIDC_JWKS: http://keycloak:8080/realms/catp/protocol/openid-connect/certs
     depends_on:
       - keycloak
 

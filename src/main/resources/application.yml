@@ -40,7 +40,7 @@ heatnet:
     issuer-uri: ${HEATNET_OIDC_ISSUER:}
     # внутренний адрес ключей Keycloak в сети compose (issuer при этом остаётся внешним)
     jwk-set-uri: ${HEATNET_OIDC_JWKS:}
-    client-id: ${HEATNET_OIDC_CLIENT_ID:heatnet-viewer}
+    client-id: ${HEATNET_OIDC_CLIENT_ID:catp-web}
     cors-origins: ${HEATNET_CORS_ORIGINS:*}
   samples-dir: ${HEATNET_SAMPLES:data/samples}       # образцы для просмотрщика, раздаются через /api/samples
   storage-dir: ${HEATNET_STORAGE:/var/lib/heatnet}   # входные файлы, результаты, временные NDJSON

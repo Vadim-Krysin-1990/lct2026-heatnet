@@ -71,8 +71,8 @@ public class SecurityConfig {
                 .antMatchers("/", "/index.html", "/viewer/**", "/lib/**", "/actuator/health",
                         "/api/auth/config").permitAll()
                 .antMatchers(org.springframework.http.HttpMethod.POST, "/api/process", "/api/jobs", "/api/rules/reload")
-                    .hasAnyRole("HEATNET-ENGINEER", "HEATNET-ADMIN")
-                .antMatchers("/api/**").hasAnyRole("HEATNET-VIEWER", "HEATNET-ENGINEER", "HEATNET-ADMIN")
+                    .hasAnyRole("CATP-ENGINEER", "CATP-ADMIN")
+                .antMatchers("/api/**").hasAnyRole("CATP-VIEWER", "CATP-ENGINEER", "CATP-ADMIN")
                 .anyRequest().authenticated()
                 .and()
                 .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(converter())));

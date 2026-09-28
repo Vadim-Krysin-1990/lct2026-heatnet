@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>heatnet — просмотр результата трассировки</title>
+<title>ЦАТ — трассы теплоснабжения</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
@@ -207,7 +207,7 @@
   <div class="mark" id="brandMark">М</div>
   <div>
     <div class="ttl" id="brandTitle">Москва · городские сервисы</div>
-    <div class="sub">heatnet — моделирование трасс подключения к тепловым сетям</div>
+    <div class="sub">ЦАТ · цифровой аналитик трасс подключения к тепловым сетям</div>
   </div>
   <div class="spacer"></div>
   <div class="brandsw switch" role="group" aria-label="Фирменный стиль">
@@ -335,8 +335,11 @@
 <section class="page" id="page-about">
   <div class="page-inner">
     <h1>О сервисе</h1>
-    <p>heatnet — сервис моделирования трасс подключения объектов капитального строительства к существующим
-      тепловым сетям. Вход и выход — GeoJSON структуры технического приложения (редакция от 21.09.2026),
+    <p><b>Цифровой аналитик трасс подключения к тепловым сетям (ЦАТ)</b> — сервис, который по данным о
+      существующей сети, точках присоединения новых объектов и городских ограничениях сам строит и
+      сравнивает варианты подключения: где присоединиться, как пройти трассе, какие нужны диаметры,
+      камеры и узлы и сколько это будет стоить. Инженеру остаётся проверить и выбрать, а не чертить.
+      Вход и выход — Вход и выход — GeoJSON структуры технического приложения (редакция от 21.09.2026),
       расчёт в проекции EPSG:32637, выдача в WGS 84.</p>
     <h2>Как считает</h2>
     <p>Трасса ищется алгоритмом A* по растровому окну, развёрнутому вдоль преобладающего направления застройки:
@@ -355,8 +358,8 @@
     <p id="aboutAuth" class="muted">На этом стенде проверка токенов выключена, чтобы решение можно было посмотреть
       без учётной записи: сервис поднимается одним <code>docker-compose up</code> и не зависит от внешних систем —
       именно так его и разворачивает проверяющий. Единый вход через Keycloak — отдельный контур, включается оверлеем
-      <code>deploy/docker-compose.keycloak.yml</code>: realm разворачивается из файла, роли heatnet-admin,
-      heatnet-engineer и heatnet-viewer разграничивают запуск расчёта и просмотр. В этом режиме закрыты и данные,
+      <code>deploy/docker-compose.keycloak.yml</code>: realm разворачивается из файла, роли администратора, инженера
+      и наблюдателя разграничивают запуск расчёта и просмотр. В этом режиме закрыты и данные,
       и документация API, а журнал событий ведётся всегда — см. вкладку «Журнал событий».</p>
   </div>
 </section>
@@ -365,6 +368,7 @@
 <script>
 (function () {
   // ---------- фирменный стиль заказчика ----------
+  const NS = 'catp';                       // префикс ключей хранилища
   const API = (location.port === '8777' ? 'http://13.143.181.167' : '') + '/api';
   let token = null;
 
@@ -376,11 +380,11 @@
     if (name === 'map' && window._hnMap) setTimeout(() => { layout(); }, 30);
     if (name === 'variants') renderVariantTable();
     if (name === 'log') loadLog();
-    try { localStorage.setItem('heatnet.tab', name); } catch (e) { /* приватный режим */ }
+    try { localStorage.setItem(NS + '.tab', name); } catch (e) { /* приватный режим */ }
   }
   tabs.forEach(t => t.addEventListener('click', () => openPage(t.dataset.page)));
   let startTab = 'map';
-  try { startTab = localStorage.getItem('heatnet.tab') || 'map'; } catch (e) { /* приватный режим */ }
+  try { startTab = localStorage.getItem(NS + '.tab') || 'map'; } catch (e) { /* приватный режим */ }
   if (startTab !== 'map') setTimeout(() => openPage(startTab), 0);
 
   const brands = {
@@ -394,13 +398,13 @@
     document.getElementById('brandTitle').textContent = brands[name].title;
     document.getElementById('brandMos').setAttribute('aria-pressed', String(name === 'mos'));
     document.getElementById('brandMoek').setAttribute('aria-pressed', String(name === 'moek'));
-    try { localStorage.setItem('heatnet.brand', name); } catch (e) { /* приватный режим */ }
+    try { localStorage.setItem(NS + '.brand', name); } catch (e) { /* приватный режим */ }
   }
   document.getElementById('gateLogin').addEventListener('click', () => login());
   document.getElementById('brandMos').addEventListener('click', () => setBrand('mos'));
   document.getElementById('brandMoek').addEventListener('click', () => setBrand('moek'));
   let savedBrand = 'mos';
-  try { savedBrand = localStorage.getItem('heatnet.brand') || 'mos'; } catch (e) { /* нет доступа к хранилищу */ }
+  try { savedBrand = localStorage.getItem(NS + '.brand') || 'mos'; } catch (e) { /* нет доступа к хранилищу */ }
   setBrand(brands[savedBrand] ? savedBrand : 'mos');
 
   const wrap = document.getElementById('mapwrap'), mapEl = document.getElementById('map');
@@ -802,7 +806,7 @@
     }
     if (e.status === 403) {
       return `<div class="notice"><b>Недостаточно прав.</b>
-        <div class="muted">${what} доступен ролям heatnet-viewer, heatnet-engineer и heatnet-admin.
+        <div class="muted">${what} доступен ролям наблюдателя, инженера и администратора.
         Текущая учётная запись: ${document.getElementById('whoName').textContent}.</div></div>`;
     }
     return `<div class="notice"><b>Сервис недоступен: ${e.message}.</b>
@@ -883,36 +887,56 @@
   function b64url(bytes) {
     return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
+  /**
+   * PKCE. Хеширование доступно только в защищённом контексте (https или localhost); по http
+   * `crypto.subtle` не существует, поэтому там используется method=plain — он допускается
+   * RFC 7636 и настроен в realm. Без этого кнопка входа молча падала на http-стенде.
+   */
   async function pkce() {
     const v = b64url(crypto.getRandomValues(new Uint8Array(32)));
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
-    return { verifier: v, challenge: b64url(digest) };
+    if (window.isSecureContext && window.crypto && crypto.subtle) {
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+        return { verifier: v, challenge: b64url(digest), method: 'S256' };
+      } catch (e) { /* хеширование недоступно — ниже запасной вариант */ }
+    }
+    return { verifier: v, challenge: v, method: 'plain' };
   }
   async function login() {
-    const p = await pkce();
-    sessionStorage.setItem('heatnet.pkce', p.verifier);
-    const u = new URL(oidc.issuer + '/protocol/openid-connect/auth');
-    u.searchParams.set('client_id', oidc.client_id);
-    u.searchParams.set('redirect_uri', location.origin + location.pathname);
-    u.searchParams.set('response_type', 'code');
-    u.searchParams.set('scope', 'openid profile');
-    u.searchParams.set('code_challenge', p.challenge);
-    u.searchParams.set('code_challenge_method', 'S256');
-    location.href = u.toString();
+    if (!oidc.enabled || !oidc.issuer) {
+      alert('Единый вход на этом стенде выключен: сервис работает открыто, как при конкурсной проверке.\n'
+          + 'Чтобы включить, поднимите оверлей deploy/docker-compose.keycloak.yml.');
+      return;
+    }
+    try {
+      const p = await pkce();
+      sessionStorage.setItem(NS + '.pkce', p.verifier);
+      sessionStorage.setItem(NS + '.pkce_method', p.method);
+      const u = new URL(oidc.issuer.replace(/\/$/, '') + '/protocol/openid-connect/auth');
+      u.searchParams.set('client_id', oidc.client_id);
+      u.searchParams.set('redirect_uri', location.origin + location.pathname);
+      u.searchParams.set('response_type', 'code');
+      u.searchParams.set('scope', 'openid profile');
+      u.searchParams.set('code_challenge', p.challenge);
+      u.searchParams.set('code_challenge_method', p.method);
+      location.href = u.toString();
+    } catch (e) {
+      alert('Не удалось начать вход: ' + e.message);
+    }
   }
   async function exchange(code) {
-    const verifier = sessionStorage.getItem('heatnet.pkce') || '';
+    const verifier = sessionStorage.getItem(NS + '.pkce') || '';
     const body = new URLSearchParams({
       grant_type: 'authorization_code', code, client_id: oidc.client_id,
       redirect_uri: location.origin + location.pathname, code_verifier: verifier
     });
-    const r = await fetch(oidc.issuer + '/protocol/openid-connect/token', {
+    const r = await fetch(oidc.issuer.replace(/\/$/, '') + '/protocol/openid-connect/token', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
     });
     if (!r.ok) throw new Error('обмен кода на токен не удался: ' + r.status);
     const d = await r.json();
     token = d.access_token;
-    try { sessionStorage.setItem('heatnet.token', token); } catch (e) { /* приватный режим */ }
+    try { sessionStorage.setItem(NS + '.token', token); } catch (e) { /* приватный режим */ }
     history.replaceState({}, '', location.pathname);
   }
   function showUser(u) {
@@ -927,10 +951,10 @@
   function logout() {
     const t = token;
     token = null;
-    try { sessionStorage.removeItem('heatnet.token'); } catch (e) { /* приватный режим */ }
+    try { sessionStorage.removeItem(NS + '.token'); } catch (e) { /* приватный режим */ }
     showUser({ authenticated: false, username: 'анонимно', roles: [] });
     if (oidc.enabled && t) {
-      const u = new URL(oidc.issuer + '/protocol/openid-connect/logout');
+      const u = new URL(oidc.issuer.replace(/\/$/, '') + '/protocol/openid-connect/logout');
       u.searchParams.set('client_id', oidc.client_id);
       u.searchParams.set('post_logout_redirect_uri', location.origin + location.pathname);
       location.href = u.toString();
@@ -941,9 +965,9 @@
     if (oidc.enabled) {
       const code = new URLSearchParams(location.search).get('code');
       if (code) { try { await exchange(code); } catch (e) { console.warn(e); } }
-      else { try { token = sessionStorage.getItem('heatnet.token'); } catch (e) { /* приватный режим */ } }
+      else { try { token = sessionStorage.getItem(NS + '.token'); } catch (e) { /* приватный режим */ } }
       document.getElementById('aboutAuth').textContent =
-        'Единый вход включён: токены выдаёт Keycloak (' + oidc.issuer + '), роли heatnet-admin / heatnet-engineer / heatnet-viewer.';
+        'Единый вход включён: токены выдаёт Keycloak (' + oidc.issuer + '), роли администратора, инженера и наблюдателя.';
     }
     let me = { authenticated: false, username: 'анонимно', roles: [] };
     try {

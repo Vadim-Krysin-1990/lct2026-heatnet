@@ -1,22 +1,22 @@
 {
-  "realm": "heatnet",
+  "realm": "catp",
   "enabled": true,
-  "displayName": "heatnet — трассировка тепловых сетей",
+  "displayName": "ЦАТ — цифровой аналитик трасс подключения",
   "sslRequired": "none",
   "registrationAllowed": false,
   "loginTheme": "keycloak",
   "accessTokenLifespan": 3600,
   "roles": {
     "realm": [
-      { "name": "heatnet-admin", "description": "Администратор сервиса: правила, журнал, расчёты" },
-      { "name": "heatnet-engineer", "description": "Инженер: запуск расчётов и просмотр результатов" },
-      { "name": "heatnet-viewer", "description": "Наблюдатель: только просмотр результатов и журнала" }
+      { "name": "catp-admin", "description": "Администратор сервиса: правила, журнал, расчёты" },
+      { "name": "catp-engineer", "description": "Инженер: запуск расчётов и просмотр результатов" },
+      { "name": "catp-viewer", "description": "Наблюдатель: только просмотр результатов и журнала" }
     ]
   },
   "clients": [
     {
-      "clientId": "heatnet-viewer",
-      "name": "Просмотрщик трасс",
+      "clientId": "catp-web",
+      "name": "Веб-интерфейс ЦАТ",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,
@@ -27,11 +27,11 @@
       "attributes": { "pkce.code.challenge.method": "S256" },
       "protocolMappers": [
         {
-          "name": "audience-heatnet",
+          "name": "audience-catp",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.client.audience": "heatnet-viewer",
+            "included.client.audience": "catp-web",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -41,14 +41,14 @@
   ],
   "users": [
     {
-      "username": "admin.heat",
+      "username": "admin.catp",
       "enabled": true,
       "firstName": "Администратор",
       "lastName": "Сервиса",
-      "email": "admin.heat@example.org",
+      "email": "admin.catp@example.org",
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
-      "realmRoles": ["heatnet-admin"]
+      "credentials": [{ "type": "password", "value": "catp2026", "temporary": false }],
+      "realmRoles": ["catp-admin"]
     },
     {
       "username": "engineer",
@@ -57,8 +57,8 @@
       "lastName": "Теплосетей",
       "email": "engineer@example.org",
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
-      "realmRoles": ["heatnet-engineer"]
+      "credentials": [{ "type": "password", "value": "catp2026", "temporary": false }],
+      "realmRoles": ["catp-engineer"]
     },
     {
       "username": "viewer",
@@ -67,8 +67,8 @@
       "lastName": "ДИТ",
       "email": "viewer@example.org",
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "heatnet", "temporary": false }],
-      "realmRoles": ["heatnet-viewer"]
+      "credentials": [{ "type": "password", "value": "catp2026", "temporary": false }],
+      "realmRoles": ["catp-viewer"]
     }
   ]
 }

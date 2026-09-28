@@ -31,7 +31,7 @@ public class AuthController {
     @Value("${heatnet.security.issuer-uri:}")
     private String issuer;
 
-    @Value("${heatnet.security.client-id:heatnet-viewer}")
+    @Value("${heatnet.security.client-id:catp-web}")
     private String clientId;
 
     private final EventService events;
