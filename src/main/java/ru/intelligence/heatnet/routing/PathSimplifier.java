@@ -115,6 +115,34 @@ public final class PathSimplifier {
                 break;
             }
         }
+        return pullVisible(w, out, fixedHead);
+    }
+
+    /**
+     * Спрямление по видимости: от каждой вершины ищем самую дальнюю, до которой прямая свободна,
+     * и выбрасываем всё промежуточное. Снятие вершин по одной оставляет «лесенки» там, где
+     * одна прямая прошла бы через несколько шагов сразу — этот проход их убирает.
+     * Повороты на концах срезки остаются не круче 90°, концы трассы неподвижны.
+     */
+    static List<Coordinate> pullVisible(RasterWindow w, List<Coordinate> pts, int fixedHead) {
+        if (pts.size() < 4) return pts;
+        List<Coordinate> out = new ArrayList<>(pts);
+        int i = Math.max(0, fixedHead - 1);
+        while (i + 2 < out.size()) {
+            int best = -1;
+            // дальняя достижимая вершина; последняя точка трассы остаётся на месте
+            for (int j = out.size() - 1; j > i + 1; j--) {
+                if (!segmentFree(w, out.get(i), out.get(j))) continue;
+                if (i > 0 && turnDeg(out.get(i - 1), out.get(i), out.get(j)) > 90 + 1e-6) continue;
+                if (j + 1 < out.size() && turnDeg(out.get(i), out.get(j), out.get(j + 1)) > 90 + 1e-6) continue;
+                best = j;
+                break;
+            }
+            if (best > i + 1) {
+                out.subList(i + 1, best).clear();
+            }
+            i++;
+        }
         return out;
     }
 

@@ -47,6 +47,16 @@ class RulesTest {
         assertEquals(100_000_000 + 500_000 * 24.87, r.penalty(24.87), 1e-6);
         // пример ТП §10.8: calculated_cost 51 094 590, length 220.2 → score 2.091
         assertEquals(2.091, r.score(51_094_590, 220.2), 0.0005);
+
+        // Контрольный пример выходного файла из технического приложения (раздел 7):
+        // участок 100 м ДУ100 плюс одна врезка в существующую камеру.
+        // Сверяем всю цепочку — цену метра, состав construction_cost и показатель S,
+        // потому что по этому примеру эксперт проверяет расчёт в первую очередь.
+        double segments = 100.0 * r.spec(100).newCostPerM;
+        assertEquals(8_974_800, segments, 0.5, "стоимость 100 м ДУ100 по таблице 1");
+        double constructionCost = segments + 0 + r.tieIn.cost;   // участки + камеры + врезки
+        assertEquals(13_974_800, constructionCost, 0.5, "construction_cost контрольного примера");
+        assertEquals(0.6913, r.score(constructionCost, 100.0), 0.00005, "score контрольного примера");
         // проверка весов: 0.7 стоимость, 0.3 длина (ТП §9)
         assertEquals(0.7, r.ranking.costWeight);
         assertEquals(0.3, r.ranking.lengthWeight);
