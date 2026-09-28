@@ -33,6 +33,9 @@
     :root:not([data-theme="light"])[data-brand="moek"] { --accent: #239ae7; --accent-soft: #10222e; --link: #239ae7; }
     :root:not([data-theme="light"]):not([data-brand="moek"]) { --accent: #d4726f; }
   }
+  /* собственный display у элемента перебивает атрибут hidden из таблицы браузера,
+     поэтому скрытие задаём явно и с приоритетом */
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink);
     font: 14px/1.45 "Golos Text", -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: 100%; height: 100%; }
