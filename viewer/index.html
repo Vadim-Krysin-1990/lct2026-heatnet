@@ -87,6 +87,10 @@
   .gate button { background: var(--accent); color: #fff; border-color: var(--accent); padding: 10px 18px; font-size: 14px; }
   .gate .mark { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff;
     display: grid; place-items: center; font-weight: 700; margin-bottom: 14px; }
+  .hint { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.4; }
+  .hint b { display: block; margin-bottom: 3px; }
+  .hint a { color: var(--link); }
   .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
     padding: 14px 16px; background: var(--accent-soft); max-width: 620px; }
   .notice .muted { margin: 4px 0 10px; }
@@ -225,6 +229,13 @@
   <div id="panel">
     <div class="content">
     <h1>Трассы подключения к тепловым сетям</h1>
+    <div class="hint">
+      <b>Демонстрационный стенд, вход не требуется.</b>
+      Конкурсный набор и результат его расчёта уже загружены — переключайте варианты ниже.
+      Свой файл: перетащите его в поле «Результат сервиса».
+      API — <a href="/swagger-ui.html" target="_blank" rel="noopener">/swagger-ui.html</a>,
+      расчёт — <code>POST /api/process</code>.
+    </div>
     <div class="muted">Предварительная трассировка для технологического присоединения: места присоединения,
       новые камеры, условные диаметры и стоимость. Расчёт выполняет сервис, страница только показывает результат.</div>
 
@@ -341,9 +352,12 @@
       <tr><td><a href="/swagger-ui.html" target="_blank" rel="noopener">/swagger-ui.html</a></td><td>описание API</td></tr>
     </table>
     <h2>Доступ</h2>
-    <p id="aboutAuth" class="muted">Проверка токенов выключена: сервис поднимается одним <code>docker-compose up</code>
-      без внешних систем, как требует конкурсная проверка. Единый вход через Keycloak включается оверлеем
-      <code>deploy/docker-compose.keycloak.yml</code>: роли heatnet-admin, heatnet-engineer, heatnet-viewer.</p>
+    <p id="aboutAuth" class="muted">На этом стенде проверка токенов выключена, чтобы решение можно было посмотреть
+      без учётной записи: сервис поднимается одним <code>docker-compose up</code> и не зависит от внешних систем —
+      именно так его и разворачивает проверяющий. Единый вход через Keycloak — отдельный контур, включается оверлеем
+      <code>deploy/docker-compose.keycloak.yml</code>: realm разворачивается из файла, роли heatnet-admin,
+      heatnet-engineer и heatnet-viewer разграничивают запуск расчёта и просмотр. В этом режиме закрыты и данные,
+      и документация API, а журнал событий ведётся всегда — см. вкладку «Журнал событий».</p>
   </div>
 </section>
 
