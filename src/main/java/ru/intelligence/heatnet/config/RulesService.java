@@ -41,8 +41,8 @@ public class RulesService {
         reference = load("reference.yml", ReferenceRules.class);
         restrictions = load("restrictions.yml", RestrictionRules.class);
         routing = load("routing.yml", RoutingRules.class);
-        log.info("Правила загружены: ДУ {} ступеней, типов ограничений {}, шаг сетки {} м",
-                reference.diameters.size(), restrictions.types.size(), routing.gridStepM);
+        log.info("Правила загружены: ресурс «{}», ДУ {} ступеней, типов ограничений {}, шаг сетки {} м",
+                reference.resource.title, reference.diameters.size(), restrictions.types.size(), routing.gridStepM);
     }
 
     private <T> T load(String name, Class<T> type) {

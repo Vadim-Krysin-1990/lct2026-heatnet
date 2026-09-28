@@ -127,7 +127,7 @@ public final class PathSimplifier {
     }
 
     /** Свободен ли отрезок произвольного направления: выборка с шагом полклетки по маске и зонам. */
-    static boolean segmentFree(RasterWindow w, Coordinate a, Coordinate b) {
+    public static boolean segmentFree(RasterWindow w, Coordinate a, Coordinate b) {
         double len = a.distance(b);
         if (len < 1e-9) return true;
         int n = (int) Math.ceil(len / (w.step * 0.5));

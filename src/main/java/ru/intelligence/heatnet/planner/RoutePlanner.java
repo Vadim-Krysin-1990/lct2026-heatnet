@@ -380,6 +380,12 @@ public class RoutePlanner {
             }
             default: throw new IllegalStateException("неизвестный вид цели " + goal.kind);
         }
+        // Конец пути мог сместиться уже после упрощения (перенос в существующую камеру по правилу 10 м,
+        // проекция на цель), поэтому нормализуем геометрию в последнюю очередь: снимаем шпильки и
+        // срезаем оставшиеся повороты круче 90° — ТП §2.1 их запрещает.
+        full = mergeCollinear(despike(full, rr.despikeMaxM));
+        full = mergeCollinear(clampTurns(w, full, rr.maxTurnDeg));
+
         // разрезать путь по спецзонам: участки со special отдельными рёбрами (ТП §5, §8.1)
         List<List<Coordinate>> pieces = new ArrayList<>();
         List<String> types = new ArrayList<>();
@@ -406,6 +412,47 @@ public class RoutePlanner {
     private static Coordinate nearestOn(Geometry g, Coordinate c) {
         Coordinate[] near = org.locationtech.jts.operation.distance.DistanceOp.nearestPoints(g, GeoUtil.point(c));
         return near[0];
+    }
+
+    /**
+     * Приводит повороты к допустимым: вершина с изломом круче maxTurnDeg срезается фаской — вместо
+     * одного запрещённого поворота получаются два разрешённых. Длина фаски берётся от более короткого
+     * звена, срезка выполняется только если оба новых отрезка свободны. Концы трассы (точка подключения
+     * и место присоединения) неподвижны.
+     */
+    static List<Coordinate> clampTurns(RasterWindow w, List<Coordinate> pts, double maxTurnDeg) {
+        List<Coordinate> out = new ArrayList<>(pts);
+        for (int pass = 0; pass < 4; pass++) {
+            boolean changed = false;
+            for (int i = 1; i + 1 < out.size(); i++) {
+                Coordinate a = out.get(i - 1), b = out.get(i), c = out.get(i + 1);
+                if (PathSimplifier.turnDeg(a, b, c) <= maxTurnDeg + 1e-6) continue;
+                double la = a.distance(b), lc = b.distance(c);
+                double maxCut = Math.min(Math.min(la, lc) * 0.5, 4.0);
+                // фаска у самой границы буфера может не пройти по свободе — пробуем короче
+                Coordinate p1 = null, p2 = null;
+                for (double cut = maxCut; cut >= 0.2; cut /= 2) {
+                    Coordinate q1 = along(b, a, cut), q2 = along(b, c, cut);
+                    if (PathSimplifier.segmentFree(w, a, q1) && PathSimplifier.segmentFree(w, q1, q2)
+                            && PathSimplifier.segmentFree(w, q2, c)) { p1 = q1; p2 = q2; break; }
+                }
+                if (p1 == null) continue;
+                out.set(i, p1);
+                out.add(i + 1, p2);
+                changed = true;
+                i++;
+            }
+            if (!changed) break;
+        }
+        return out;
+    }
+
+    /** Точка на отрезке from→to на расстоянии dist от from. */
+    private static Coordinate along(Coordinate from, Coordinate to, double dist) {
+        double len = from.distance(to);
+        if (len < 1e-9) return new Coordinate(from);
+        double t = dist / len;
+        return new Coordinate(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
     }
 
     /**

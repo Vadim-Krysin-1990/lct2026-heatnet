@@ -1,0 +1,81 @@
+# ПРИМЕР профиля ограничений для водопровода. Структура та же, что в основном restrictions.yml;
+# отличаются только отступы и коэффициенты. Числа ориентировочные — уточняются по СП 42.13330
+# (таблица минимальных расстояний до инженерных сетей) профильным специалистом.
+
+default_rule: forbidden
+default_clearance_m: 1.0
+
+types:
+  oks:
+    title: "Объект капитального строительства"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 5.0
+    source: "СП 42.13330, расстояние от водопровода до фундамента здания (профиль-пример)"
+  water:
+    title: "Водный объект"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+  park:
+    title: "Парк, зелёная зона"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+  social_area:
+    title: "Социальный объект"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+  prohibited_site:
+    title: "Запретная территория"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+  railway:
+    title: "Железная дорога"
+    rule: forbidden
+    geometry: polygon
+    clearance_m: 1.0
+  road:
+    title: "Автомобильная дорога"
+    rule: special
+    geometry: polygon
+    clearance_m: 1.5
+    zone_margin_m: 3.0
+    min_crossing_angle_deg: 45
+    k_special: 1.60
+    depth: {position: below, min_top_depth_m: 1.0}
+  tram_tracks:
+    title: "Трамвайные пути"
+    rule: special
+    geometry: polygon
+    clearance_m: 1.5
+    zone_margin_m: 3.0
+    min_crossing_angle_deg: 45
+    k_special: 1.75
+    depth: {position: below, min_top_depth_m: 1.2}
+  gas_pipeline:
+    title: "Газопровод"
+    rule: special
+    geometry: line
+    clearance_m: 1.5
+    zone_margin_m: 2.0
+    k_special: 1.25
+    depth: {position: any, min_vertical_clearance_m: 0.2}
+  power_cable:
+    title: "Силовой кабель"
+    rule: special
+    geometry: line
+    clearance_m: 0.5
+    zone_margin_m: 2.0
+    k_special: 1.15
+    depth: {position: any, min_vertical_clearance_m: 0.5}
+  heat_network:
+    title: "Тепловая сеть"
+    rule: special
+    geometry: line
+    clearance_m: 1.5
+    zone_margin_m: 2.0
+    k_special: 1.05
+    depth: {position: any, min_vertical_clearance_m: 0.5}

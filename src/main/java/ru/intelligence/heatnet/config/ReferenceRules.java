@@ -7,6 +7,20 @@ import java.util.Map;
 /** Справочник техприложения (rules/reference.yml). Имена полей — snake_case в YAML. */
 public class ReferenceRules {
 
+    public Resource resource = new Resource();
+
+    /**
+     * Тип моделируемого ресурса. Задаётся справочником, а не кодом: алгоритм трассировки одинаков
+     * для теплосети, водопровода и кабельных линий, меняются только таблицы и правила.
+     * Пример профиля — `rules-profiles/water`.
+     */
+    public static class Resource {
+        public String code = "heat_network";
+        public String title = "Тепловая сеть";
+        public String flowUnit = "т/ч";
+        public String source;
+    }
+
     public static class Crs {
         public String input = "EPSG:4326";
         public String calcProj4 = "+proj=utm +zone=37 +datum=WGS84 +units=m +no_defs";

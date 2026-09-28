@@ -62,6 +62,12 @@ public class VariantPlanner {
         }
         ObstacleField field = new ObstacleField(model, rules.restrictions(), ref, rules.routing(), clearanceDn);
         diag.stats.put("clearance_dn", clearanceDn);
+        diag.stats.put("resource", ref.resource.code);
+        if (!"heat_network".equals(ref.resource.code)) {
+            diag.info("RESOURCE", "Расчёт выполняется по справочнику ресурса «" + ref.resource.title
+                    + "» (" + ref.resource.code + "): расходы в " + ref.resource.flowUnit
+                    + ". Алгоритм трассировки от типа ресурса не зависит", null);
+        }
         double gridBearing = rules.routing().gridBearingDeg != null ? rules.routing().gridBearingDeg : dominantBearing(model);
         diag.info("GRID_BEARING", "Азимут сетки трассировки: " + GeoUtil.round(gridBearing, 1) + "° — преобладающее направление существующей сети и застройки; инженерные варианты строятся вдоль него с поворотами 90°", null);
         diag.stats.put("grid_bearing_deg", GeoUtil.round(gridBearing, 1));

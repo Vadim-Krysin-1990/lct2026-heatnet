@@ -1,0 +1,69 @@
+# ПРИМЕР профиля правил для другого ресурса — хозяйственно-питьевой водопровод.
+# Показывает, что тип ресурса не зашит в код: алгоритм трассировки, сборка дерева, подбор диаметра
+# по расходу и предельной длине, камеры, узлы и ранжирование работают на любом справочнике.
+#
+# Запуск:  HEATNET_RULES=./rules-profiles/water docker-compose up -d
+#          либо  POST /api/rules/reload  после подмены каталога.
+#
+# ВНИМАНИЕ: числа ниже — ориентировочные, для демонстрации механизма. Перед применением их должен
+# заполнить профильный специалист по СП 31.13330 «Водоснабжение. Наружные сети и сооружения»
+# и действующим сметным нормативам. Источник каждой строки указывается в поле source, как в
+# основном справочнике по теплоснабжению.
+
+resource:
+  code: water_supply
+  title: "Хозяйственно-питьевой водопровод"
+  flow_unit: "м³/ч"
+  source: "СП 31.13330 (профиль-пример, числа требуют проверки специалистом)"
+
+crs:
+  input: "EPSG:4326"
+  calc_proj4: "+proj=utm +zone=37 +datum=WGS84 +units=m +no_defs"
+
+# ДУ, пропускная способность (м³/ч при скорости ~1,2 м/с), предельная длина участка одного диаметра,
+# стоимость 1 м, расчётные габариты траншеи
+diameters:
+  - {dn: 63,   capacity_tph: 13,   max_length_m: 300,  new_cost_per_m: 12000, width_m: 0.40, height_m: 0.07}
+  - {dn: 90,   capacity_tph: 27,   max_length_m: 400,  new_cost_per_m: 15000, width_m: 0.45, height_m: 0.09}
+  - {dn: 110,  capacity_tph: 41,   max_length_m: 500,  new_cost_per_m: 17500, width_m: 0.50, height_m: 0.11}
+  - {dn: 160,  capacity_tph: 87,   max_length_m: 700,  new_cost_per_m: 24000, width_m: 0.55, height_m: 0.16}
+  - {dn: 225,  capacity_tph: 172,  max_length_m: 900,  new_cost_per_m: 34000, width_m: 0.65, height_m: 0.23}
+  - {dn: 315,  capacity_tph: 337,  max_length_m: 1200, new_cost_per_m: 49000, width_m: 0.75, height_m: 0.32}
+  - {dn: 400,  capacity_tph: 543,  max_length_m: 1500, new_cost_per_m: 68000, width_m: 0.90, height_m: 0.40}
+  - {dn: 500,  capacity_tph: 848,  max_length_m: 1800, new_cost_per_m: 92000, width_m: 1.05, height_m: 0.50}
+
+length_limit:
+  allow_upsize_steps: 1
+
+# узлы: вместо тепловой камеры — водопроводный колодец
+chambers:
+  base_cost: 900000
+  cost_per_dn: 2500
+  max_branches: 4
+  existing_chamber_tie_in_radius_m: 10.0
+
+tie_in:
+  cost: 700000
+
+unconnected_penalty:
+  fixed: 100000000
+  per_tph: 500000
+
+ranking:
+  cost_weight: 0.7
+  cost_base: 25000000
+  length_weight: 0.3
+  length_base: 100
+
+depth:
+  normal_depth_m: 2.0          # ниже глубины промерзания (СП 31.13330)
+  min_top_depth_m: 1.0
+  max_top_depth_m: 6.0
+  max_slope: 0.10
+  plateau_half_length_m: 2.0
+  k_depth_per_m: 0.1
+
+existing_utilities:
+  gas_pipeline:  {width_m: 0.40, height_m: 0.40, top_depth_m: 2.8}
+  power_cable:   {width_m: 0.20, height_m: 0.20, top_depth_m: 2.7}
+  heat_network:  {width_m: 0.90, height_m: 0.45, top_depth_m: 3.0}
