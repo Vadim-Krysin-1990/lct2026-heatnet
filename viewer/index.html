@@ -428,6 +428,7 @@
     if (name === 'map' && window._hnMap) setTimeout(() => { layout(); }, 30);
     if (name === 'variants') renderVariantTable();
     if (name === 'benchmark') renderBenchmark();
+    if (name === 'profile') renderProfile();
     if (name === 'log') loadLog();
     try { localStorage.setItem(NS + '.tab', name); } catch (e) { /* приватный режим */ }
   }
@@ -709,6 +710,7 @@
   function renderVariants(fc) {
     result = fc;
     if (document.getElementById('page-benchmark').classList.contains('active')) setTimeout(renderBenchmark, 0);
+    document.getElementById('profChain').dataset.variant = '';
     if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
     const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
     const box = document.getElementById('variants'); box.innerHTML = '';
@@ -742,6 +744,7 @@
   }
   function showVariant(id) {
     current = id;
+    if (document.getElementById('page-profile').classList.contains('active')) setTimeout(renderProfile, 0);
     costLabels = [];
     pinned = null; inspectEl.hidden = true;
     document.querySelectorAll('#variants button').forEach(b => b.classList.toggle('active', b.dataset.variant === id));
@@ -834,6 +837,130 @@
       </tr>`).join('')}
     </table>
     <p class="muted">Показать вариант на карте — вкладка «Карта», кнопки слева.</p>`;
+  }
+
+  // ---------- экран «Профиль по глубине» ----------
+  /** Цепочки участков между узлами: от точки подключения до места присоединения. */
+  function chainsOf(fc, vid) {
+    const segs = fc.features.filter(f => f.properties.object_type === 'heat_network'
+      && f.properties.variant_id === vid && f.geometry);
+    if (!segs.length) return [];
+    const deg = {};
+    const key = p => String(p);
+    segs.forEach(f => {
+      deg[key(f.properties.start_node_id)] = (deg[key(f.properties.start_node_id)] || 0) + 1;
+      deg[key(f.properties.end_node_id)] = (deg[key(f.properties.end_node_id)] || 0) + 1;
+    });
+    const byNode = {};
+    segs.forEach(f => {
+      [f.properties.start_node_id, f.properties.end_node_id].forEach(n => {
+        (byNode[key(n)] = byNode[key(n)] || []).push(f);
+      });
+    });
+    const used = new Set(), chains = [];
+    Object.keys(deg).filter(n => deg[n] !== 2).forEach(startNode => {
+      (byNode[startNode] || []).forEach(first => {
+        if (used.has(first.properties.id)) return;
+        const chain = [];
+        let cur = first, node = startNode;
+        while (cur && !used.has(cur.properties.id)) {
+          used.add(cur.properties.id);
+          const from = node;
+          chain.push({ f: cur, forward: key(cur.properties.start_node_id) === from });
+          node = key(cur.properties.start_node_id) === from
+            ? key(cur.properties.end_node_id) : key(cur.properties.start_node_id);
+          if (deg[node] !== 2) break;
+          cur = (byNode[node] || []).find(x => !used.has(x.properties.id));
+        }
+        if (chain.length) chains.push({ from: startNode, to: node, segs: chain });
+      });
+    });
+    return chains;
+  }
+
+  function profileData(chain) {
+    const pts = [];
+    let acc = 0;
+    chain.segs.forEach(({ f, forward }) => {
+      const p = f.properties;
+      const len = p.length || 0;
+      const d0 = forward ? p.depth_start : p.depth_end;
+      const d1 = forward ? p.depth_end : p.depth_start;
+      if (d0 == null || d1 == null) return;
+      if (!pts.length) pts.push({ s: acc, d: d0, id: p.id, dn: p.diameter });
+      acc += len;
+      pts.push({ s: acc, d: d1, id: p.id, dn: p.diameter, method: p.laying_method });
+    });
+    return pts;
+  }
+
+  function renderProfile() {
+    const box = document.getElementById('profBox');
+    const sel = document.getElementById('profChain');
+    const hint = document.getElementById('profHint');
+    if (!result || !current) { box.innerHTML = '<span class="muted">загрузите результат расчёта</span>'; return; }
+    const chains = chainsOf(result, current)
+      .map(c => ({ c, pts: profileData(c) }))
+      .filter(x => x.pts.length > 1);
+    if (!chains.length) {
+      box.innerHTML = `<div class="notice"><b>В этом файле глубины нет.</b>
+        <div class="muted">Профиль строится в режиме дополнительной задачи:
+        <code>POST /api/process?depth=true</code>. В конкурсном наборе пересекать нечего — в нём нет
+        газопроводов, кабелей и дорог, поэтому вся трасса идёт на обычной отметке 3,0 м. Демонстрационный
+        набор с коммуникациями — <code>data/samples/depth_demo_dataset.geojson</code>.</div></div>`;
+      sel.innerHTML = ''; hint.textContent = '';
+      return;
+    }
+    // цепочки с перепадом глубины интереснее — показываем их первыми
+    chains.sort((a, b) => spread(b.pts) - spread(a.pts));
+    if (sel.dataset.variant !== current) {
+      sel.dataset.variant = current;
+      sel.innerHTML = chains.map((x, i) => {
+        const len = x.pts[x.pts.length - 1].s;
+        const sp = spread(x.pts);
+        return `<option value="${i}">Цепочка ${i + 1}: ${fmt(len)} м${sp > 0.01 ? ', перепад ' + fmt(sp) + ' м' : ', без заглубления'}</option>`;
+      }).join('');
+    }
+    const idx = Math.min(Number(sel.value || 0), chains.length - 1);
+    drawProfile(box, chains[idx].pts);
+    const withDepth = chains.filter(x => spread(x.pts) > 0.01).length;
+    hint.textContent = `цепочек в варианте: ${chains.length}, с заглублением: ${withDepth}`;
+  }
+  const spread = pts => Math.max(...pts.map(p => p.d)) - Math.min(...pts.map(p => p.d));
+  document.getElementById('profChain').addEventListener('change', renderProfile);
+
+  function drawProfile(box, pts) {
+    const W = 900, H = 260, L = 52, R = 16, T = 22, B = 34;
+    const maxS = pts[pts.length - 1].s || 1;
+    const dMax = Math.max(3.4, Math.max(...pts.map(p => p.d)) + 0.4);
+    const x = s => L + (s / maxS) * (W - L - R);
+    const y = d => T + (d / dMax) * (H - T - B);
+    const path = pts.map((p, i) => (i ? 'L' : 'M') + x(p.s).toFixed(1) + ' ' + y(p.d).toFixed(1)).join(' ');
+    // отметки глубины по оси
+    const ticks = [];
+    for (let d = 0; d <= dMax; d += 1) ticks.push(d);
+    const marks = pts.filter((p, i) => i > 0 && i < pts.length - 1
+      && Math.abs(p.d - pts[i - 1].d) > 0.01);
+    box.innerHTML = `<div class="prof"><svg viewBox="0 0 ${W} ${H}" role="img"
+        aria-label="Продольный профиль трассы по глубине">
+      <line class="surface" x1="${L}" y1="${y(0)}" x2="${W - R}" y2="${y(0)}"></line>
+      <text x="${L}" y="${y(0) - 5}">поверхность земли</text>
+      ${ticks.map(d => `<text x="${L - 8}" y="${y(d) + 3}" text-anchor="end">${d.toFixed(0)}</text>
+         <line class="normal" x1="${L}" y1="${y(d)}" x2="${W - R}" y2="${y(d)}"></line>`).join('')}
+      <text x="12" y="${T - 8}">глубина, м</text>
+      <path class="pipe" d="${path}"></path>
+      ${marks.map(p => `<circle cx="${x(p.s).toFixed(1)}" cy="${y(p.d).toFixed(1)}" r="3"
+           fill="var(--net-new)"></circle>
+         <text class="val" x="${x(p.s).toFixed(1)}" y="${(y(p.d) - 8).toFixed(1)}" text-anchor="middle">${p.d.toFixed(2)}</text>`).join('')}
+      <text x="${L}" y="${H - 10}">0</text>
+      <text x="${W - R}" y="${H - 10}" text-anchor="end">${fmt(maxS)} м</text>
+      <text x="${(L + W - R) / 2}" y="${H - 10}" text-anchor="middle">расстояние по трассе</text>
+    </svg>
+    <div class="proflegend">
+      <span><i></i>ось новой сети (верх габарита)</span>
+      <span>обычная отметка 3,0 м · минимальная 0,7 м</span>
+      <span>точки с подписью — вершины профиля, там ставится технический узел</span>
+    </div></div>`;
   }
 
   // ---------- экран «Сравнение с эталоном» ----------
