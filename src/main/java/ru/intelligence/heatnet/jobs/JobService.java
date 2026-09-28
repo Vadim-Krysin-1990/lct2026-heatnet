@@ -138,8 +138,21 @@ public class JobService {
         try {
             InputLoader loader = new InputLoader(rules);
             InputModel model;
-            try (InputStream in = new BufferedInputStream(Files.newInputStream(Paths.get(j.getInputPath())), 1 << 16)) {
-                model = loader.load(in);
+            java.nio.file.Path input = Paths.get(j.getInputPath());
+            // Большой файл читаем в два прохода: сначала быстро находим область расчёта по точкам
+            // присоединения и сети, затем грузим только то, что в неё попадает. Для наборов масштаба
+            // города это разница между отказом по памяти и расчётом за минуты.
+            org.locationtech.jts.geom.Envelope area = null;
+            long size = Files.size(input);
+            if (size > props.getAreaScanThresholdBytes()) {
+                long ts = System.currentTimeMillis();
+                try (InputStream in = new BufferedInputStream(Files.newInputStream(input), 1 << 20)) {
+                    area = ru.intelligence.heatnet.ingest.AreaScanner.scan(in, props.getAreaMarginDeg());
+                }
+                log.info("Область расчёта определена за {} мс: {}", System.currentTimeMillis() - ts, area);
+            }
+            try (InputStream in = new BufferedInputStream(Files.newInputStream(input), 1 << 20)) {
+                model = loader.load(in, area);
             }
             if (model.diagnostics.hasErrors()) {
                 j.setStatus(JobEntity.Status.FAILED.name());

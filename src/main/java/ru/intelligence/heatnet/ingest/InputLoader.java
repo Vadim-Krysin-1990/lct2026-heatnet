@@ -33,7 +33,23 @@ public class InputLoader {
     public CrsTransformer crs() { return crs; }
 
     public InputModel load(InputStream in) throws IOException {
+        return load(in, null);
+    }
+
+    /**
+     * Загрузка с пространственным фильтром: ограничения вне области расчёта отбрасываются сразу
+     * при чтении, не превращаясь в геометрию. Область — оболочка вокруг точек присоединения и
+     * существующей сети с запасом; объекты за её пределами на результат повлиять не могут,
+     * потому что трасса туда не пойдёт (радиус поиска мест присоединения ограничен правилами).
+     *
+     * Нужно для наборов масштаба города: в файле на 3 ГБ полтора миллиона зданий, из них к задаче
+     * относятся единицы процентов, а держать в памяти все — это отказ по памяти.
+     *
+     * @param area область в WGS 84 или null — тогда берутся все объекты
+     */
+    public InputModel load(InputStream in, org.locationtech.jts.geom.Envelope area) throws IOException {
         InputModel m = new InputModel();
+        int[] skippedOutside = {0};
         Diagnostics d = m.diagnostics;
         Set<String> ids = new HashSet<>();
         int[] missingFlow = {0};
@@ -53,6 +69,13 @@ public class InputLoader {
             }
             if (wgs == null) {
                 if (!"variant_summary".equals(type)) d.error("MISSING_GEOMETRY", "У объекта " + id + " (" + type + ") нет геометрии — пропущен", id);
+                return;
+            }
+            // фильтр области: ограничения (их в больших наборах подавляющее большинство) вне
+            // области расчёта пропускаются до разбора геометрии в проекцию
+            if (area != null && ("restriction".equals(type) || "oks_future".equals(type) || "oks_existing".equals(type))
+                    && !area.intersects(wgs.getEnvelopeInternal())) {
+                skippedOutside[0]++;
                 return;
             }
             if (!wgs.isValid()) {
@@ -136,6 +159,11 @@ public class InputLoader {
             }
         });
         m.totalFeatures = (int) n;
+        if (skippedOutside[0] > 0) {
+            d.info("AREA_FILTER", "Вне области расчёта пропущено " + skippedOutside[0] + " ограничений из "
+                    + n + " объектов файла: они дальше радиуса поиска мест присоединения и на трассу повлиять не могут", null);
+            m.diagnostics.stats.put("skipped_outside_area", skippedOutside[0]);
+        }
         if (missingFlow[0] > 0) d.warn("MISSING_FLOW", "У " + missingFlow[0] + " из " + m.segments.size() + " участков heat_network нет flow_tph — текущий расход принят 0 т/ч (реконструкция считается только по добавленному расходу)", null);
 
         if (m.sources.isEmpty()) d.error("NO_SOURCE", "Во входных данных нет объекта source", null);

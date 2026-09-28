@@ -45,6 +45,9 @@ heatnet:
     jwk-set-uri: ${HEATNET_OIDC_JWKS:}
     client-id: ${HEATNET_OIDC_CLIENT_ID:catp-web}
     cors-origins: ${HEATNET_CORS_ORIGINS:*}
+  # двухпроходное чтение больших файлов: порог включения и запас вокруг области расчёта
+  area-scan-threshold-bytes: ${HEATNET_AREA_SCAN_THRESHOLD:209715200}
+  area-margin-deg: ${HEATNET_AREA_MARGIN_DEG:0.02}
   samples-dir: ${HEATNET_SAMPLES:data/samples}       # образцы для просмотрщика, раздаются через /api/samples
   storage-dir: ${HEATNET_STORAGE:/var/lib/heatnet}   # входные файлы, результаты, временные NDJSON
   workers: ${HEATNET_WORKERS:2}                         # параллельных расчётов; остальные — в очереди

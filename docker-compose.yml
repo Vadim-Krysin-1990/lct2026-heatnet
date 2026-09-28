@@ -29,7 +29,7 @@ services:
       HEATNET_SAMPLES: /app/data/samples
       HEATNET_TMP: /tmp/heatnet
       HEATNET_WORKERS: "2"
-      JAVA_OPTS: "-Xmx6g"
+      JAVA_OPTS: "${HEATNET_JAVA_OPTS:--Xmx12g -XX:+UseG1GC -XX:MaxGCPauseMillis=500}"   # ТЗ: 16 ГБ ОЗУ на машине
     ports:
       - "8080:8080"
     volumes:
