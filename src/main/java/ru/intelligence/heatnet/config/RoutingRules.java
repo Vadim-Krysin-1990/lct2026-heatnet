@@ -38,11 +38,10 @@ public class RoutingRules {
     /** Сколько инженерных (ортогональных) вариантов обязательно включать в выдачу. */
     public int orthogonalVariantsInOutput = 1;
     /** Сколько вариантов со спрямлением произвольным углом обязательно включать в выдачу (ТП от 21.09 разрешает любой угол до 90°). */
-    public int freeAngleVariantsInOutput = 0;
+    public int freeAngleVariantsInOutput = 2;
     /** Сколько вариантов, найденных по графу видимости, обязательно включать в выдачу. */
-    public int visibilityVariantsInOutput = 1;
+    public int visibilityVariantsInOutput = 0;
     /** Предельная длина «шпильки» — микроизлома с поворотом больше 90°, который снимается при сборке трассы. */
     public double despikeMaxM = 2.0;
-    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate",
-            "visibility_shared", "visibility_separate", "shared_tree", "separate_parts");
+    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate", "shared_tree", "separate_parts");
 }

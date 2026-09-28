@@ -147,7 +147,10 @@ public class VisibilityRouter {
                 if (from >= 0) {
                     turn = PathSimplifier.turnDeg(nodes.get(from), nodes.get(u), nodes.get(v));
                 } else if (startBearing != null) {
-                    turn = GeoUtil.acuteAngleDeg(bearing(nodes.get(u), nodes.get(v)), startBearing);
+                    // именно полный угол, а не острый: острый считает разворот на 180° нулевым
+                    // поворотом, и трасса уходит обратно в здание
+                    double diff = Math.abs(bearing(nodes.get(u), nodes.get(v)) - startBearing) % 360;
+                    turn = diff > 180 ? 360 - diff : diff;
                 } else {
                     turn = 0;
                 }
