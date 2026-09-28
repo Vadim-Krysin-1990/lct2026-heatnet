@@ -16,6 +16,10 @@ public class RoutingRules {
      * столько ступеней — иначе ствол, которому предельная длина подняла ДУ, окажется ближе нормы.
      */
     public int clearanceDnHeadroomSteps = 1;
+    /** Вынос вершины графа видимости наружу от угла запретной зоны, м. */
+    public double visibilityVertexOffsetM = 0.35;
+    /** Предел числа вершин графа видимости: при большом окне берутся ближние к точке. */
+    public int visibilityMaxVertices = 260;
     /** Предельный поворот трассы, град. (ТП от 21.09 §2.1: не круче 90°). */
     public double maxTurnDeg = 90.0;
     /** Штраф за поворот для спрямляемых вариантов: трасса ищется как кратчайшая, изломы снимает спрямление. */
@@ -32,10 +36,13 @@ public class RoutingRules {
     public double altTieInExclusionRadiusM = 30.0;
     public int maxVariants = 3;
     /** Сколько инженерных (ортогональных) вариантов обязательно включать в выдачу. */
-    public int orthogonalVariantsInOutput = 3;
+    public int orthogonalVariantsInOutput = 1;
     /** Сколько вариантов со спрямлением произвольным углом обязательно включать в выдачу (ТП от 21.09 разрешает любой угол до 90°). */
     public int freeAngleVariantsInOutput = 0;
+    /** Сколько вариантов, найденных по графу видимости, обязательно включать в выдачу. */
+    public int visibilityVariantsInOutput = 1;
     /** Предельная длина «шпильки» — микроизлома с поворотом больше 90°, который снимается при сборке трассы. */
     public double despikeMaxM = 2.0;
-    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate", "shared_tree", "separate_parts");
+    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate",
+            "visibility_shared", "visibility_separate", "shared_tree", "separate_parts");
 }

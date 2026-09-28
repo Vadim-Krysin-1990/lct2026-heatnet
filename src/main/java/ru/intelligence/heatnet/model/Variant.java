@@ -67,6 +67,12 @@ public class Variant {
     public String name;
     public String description;
     public int rank;
+    /** Метод поиска трассы: grid — растровая сетка, visibility — граф видимости. */
+    public String routingMethod = "grid";
+    /** Время поиска трасс, мс (без инженерного расчёта). */
+    public long routingMillis;
+    /** Время инженерного расчёта: расходы, диаметры, узлы, стоимость, мс. */
+    public long engineeringMillis;
 
     public final List<NewSegment> segments = new ArrayList<>();
     public final List<TieIn> tieIns = new ArrayList<>();

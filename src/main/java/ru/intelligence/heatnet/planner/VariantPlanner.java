@@ -89,14 +89,19 @@ public class VariantPlanner {
             v.description = st.description;
             NetworkBuilder nb = new NetworkBuilder();
             RoutePlanner planner = new RoutePlanner(rules, model, topo, field);
+            long tRoute = System.currentTimeMillis();
             List<RoutePlanner.PointResult> res = planner.plan(st, nb, diag);
+            v.routingMillis = System.currentTimeMillis() - tRoute;
+            v.routingMethod = st.visibility ? "visibility" : "grid";
             int expanded = 0;
             for (RoutePlanner.PointResult r : res) {
                 expanded += r.expanded;
                 if (!r.connected) v.unconnectedOksIds.add(r.cp.id);
             }
+            long tEng = System.currentTimeMillis();
             HydraulicsCalculator hc = new HydraulicsCalculator(ref, topo, model);
             hc.compute(nb, v, diag);
+            v.engineeringMillis = System.currentTimeMillis() - tEng;
             if (depthMode) new ru.intelligence.heatnet.depth.DepthProfiler(ref, rules.restrictions(), model).apply(v, diag, hc);
             v.computeMillis = System.currentTimeMillis() - ts;
             int connected = res.size() - v.unconnectedOksIds.size();
@@ -107,7 +112,11 @@ public class VariantPlanner {
             diag.info("TRACE_QUALITY", "Вариант " + v.variantId + " (" + st.name + "): " + GeoUtil.round(q[0], 1)
                     + " поворотов на км, медиана прямого участка " + GeoUtil.round(q[1], 1) + " м, прямых углов " + (int) q[3]
                     + ", косых изломов на трассе " + (int) q[2] + " (сверх них " + (int) q[4] + " поворотов на выходе из зданий по нормали к стене — требование заказчика)", null);
-            diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost) + " ₽, длина " + Math.round(v.newNetworkLength) + " м, S=" + String.format("%.3f", v.score) + ", раскрыто клеток " + expanded + ", " + v.computeMillis + " мс", null);
+            diag.info("VARIANT", "Вариант " + v.variantId + " (" + st.name + "): стоимость " + Math.round(v.calculatedCost)
+                    + " ₽, длина " + Math.round(v.newNetworkLength) + " м, S=" + String.format("%.3f", v.score)
+                    + "; метод поиска — " + ("visibility".equals(v.routingMethod) ? "граф видимости" : "растровая сетка")
+                    + ", трассировка " + v.routingMillis + " мс, инженерный расчёт " + v.engineeringMillis
+                    + " мс, всего " + v.computeMillis + " мс", null);
             all.add(v);
             if (first == null) first = v;
         }
@@ -132,6 +141,14 @@ public class VariantPlanner {
         for (Variant v : distinct) {
             if (selected.size() >= Math.min(max, rules.routing().orthogonalVariantsInOutput)) break;
             if (v.strategy != null && v.strategy.startsWith("orthogonal") && v.unconnectedOksIds.isEmpty()) selected.add(v);
+        }
+        // квота на варианты по графу видимости: обычно они лучшие по показателю S
+        int visQuota = Math.min(max - selected.size(), rules.routing().visibilityVariantsInOutput);
+        if (visQuota > 0) {
+            List<Variant> vis = new ArrayList<>();
+            for (Variant v : distinct) if (v.strategy != null && v.strategy.startsWith("visibility") && v.unconnectedOksIds.isEmpty()) vis.add(v);
+            vis.sort(Comparator.comparingDouble(v -> v.score));
+            for (Variant v : vis) { if (visQuota-- <= 0) break; if (!selected.contains(v)) selected.add(v); }
         }
         // квота на спрямлённые варианты: короче и дешевле, геометрия дальше от инженерной практики
         int freeQuota = Math.min(max - selected.size(), rules.routing().freeAngleVariantsInOutput);
@@ -164,7 +181,22 @@ public class VariantPlanner {
             out.variants.add(v);
         }
         out.millis = System.currentTimeMillis() - t0;
+        long gridMs = 0, visMs = 0, engMs = 0;
+        int gridCount = 0, visCount = 0;
+        for (Variant v : all) {
+            if ("visibility".equals(v.routingMethod)) { visMs += v.routingMillis; visCount++; }
+            else { gridMs += v.routingMillis; gridCount++; }
+            engMs += v.engineeringMillis;
+        }
         diag.stats.put("compute_millis", out.millis);
+        diag.stats.put("routing_grid_millis", gridMs);
+        diag.stats.put("routing_visibility_millis", visMs);
+        diag.stats.put("engineering_millis", engMs);
+        diag.stats.put("routing_grid_variants", gridCount);
+        diag.stats.put("routing_visibility_variants", visCount);
+        diag.info("TIMING", "Время расчёта: поиск по растровой сетке " + gridMs + " мс на " + gridCount
+                + " вариантов, поиск по графу видимости " + visMs + " мс на " + visCount
+                + " вариантов, инженерный расчёт " + engMs + " мс, всего " + out.millis + " мс", null);
         diag.stats.put("depth_mode", depthMode);
         return out;
     }
@@ -234,6 +266,31 @@ public class VariantPlanner {
                 s.freeAngle = true;
                 s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
                 s.description = "Кратчайшая трассировка со спрямлением, ближние к существующей сети точки получают собственные врезки";
+                break;
+            }
+            case "visibility_shared": {
+                s.title = "Граф видимости: общая сеть";
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
+                s.sharpTurnFactor = 1;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.visibility = true;
+                s.description = "Второй метод трассировки: путь ищется не по растровой сетке, а по графу видимости — "
+                        + "вершинами служат углы запретных зон, рёбрами прямые между ними, поэтому трасса идёт "
+                        + "по касательным к препятствиям длинными прямыми; точки объединяются в одно дерево";
+                break;
+            }
+            case "visibility_separate": {
+                s.title = "Граф видимости: свои врезки";
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
+                s.sharpTurnFactor = 1;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.visibility = true;
+                s.attachPenalty = ref().tieIn.cost + ref().chamberCost(0);
+                s.description = "Тот же граф видимости, но ближние к существующей сети точки получают собственные врезки";
                 break;
             }
             case "shared_tree":

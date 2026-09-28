@@ -13,6 +13,11 @@
 | `technical_node` | Point | `id`, `variant_id` |
 | `variant_summary` | null | `id`, `variant_id`, `rank`, `variant_name`, `variant_description`, `construction_cost`, `chamber_construction_cost`, `existing_chamber_tie_in_count`, `existing_chamber_tie_in_cost`, `unconnected_penalty`, `calculated_cost`, `new_network_length`, `score`, `unconnected_oks_ids` |
 
+`routing_method` показывает, каким методом найдена трасса: `grid` — поиск по растровой сетке,
+`visibility` — по графу видимости. `routing_millis` и `engineering_millis` разделяют время:
+первое — поиск геометрии, второе — расходы, диаметры, узлы и стоимость. `compute_millis` — итог
+по варианту. Эти поля позволяют сравнить методы между собой прямо по выходному файлу.
+
 `variant_name` и `variant_description` — дополнительные атрибуты сверх обязательного состава: словами
 поясняют, чем этот вариант отличается от других («Инженерный: общая сеть, минимум врезок»,
 «Кратчайший: спрямление, общая сеть»). Раздел 7 допускает дополнительные свойства, при проверке

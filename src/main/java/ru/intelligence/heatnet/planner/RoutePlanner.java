@@ -24,6 +24,7 @@ import ru.intelligence.heatnet.routing.AStarRouter;
 import ru.intelligence.heatnet.routing.ObstacleField;
 import ru.intelligence.heatnet.routing.PathSimplifier;
 import ru.intelligence.heatnet.routing.RasterWindow;
+import ru.intelligence.heatnet.routing.VisibilityRouter;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -60,6 +61,8 @@ public class RoutePlanner {
         public double sharpTurnFactor = 1;
         /** Спрямлять трассу произвольным углом (ТП от 21.09 §2.1: допустим любой поворот до 90°). */
         public boolean freeAngle = false;
+        /** Искать по графу видимости вместо растровой сетки: трасса идёт по касательным к препятствиям. */
+        public boolean visibility = false;
         /** Короткое название варианта («какой он») для подписи в выдаче. */
         public String title;
         public String description;
@@ -193,6 +196,28 @@ public class RoutePlanner {
                     diag.info("ROUTE_RETRY", "Точка " + cp.id + ": выход №" + tried + " (здание " + (exit.building == null ? "-" : exit.building.id) + ", " + exit.direction * 45 + "°) ведёт в замкнутый карман — пропущен", cp.id);
                     continue;
                 }
+                boolean visibilityFailed = false;
+                if (strategy.visibility) {
+                    // второй метод: поиск по графу видимости, растр используется только как
+                    // маска запретных зон и как источник целей
+                    VisibilityRouter vr = new VisibilityRouter(w, field, cnew, turnPenalty, rr.maxTurnDeg,
+                            rr.visibilityVertexOffsetM, rr.visibilityMaxVertices);
+                    Double bearing = exit.direction >= 0 ? (w.bearingDeg + exit.direction * 45.0) % 360 : null;
+                    String ownId = exit.building != null ? exit.building.id : null;
+                    VisibilityRouter.Result vres = vr.route(start, bearing, win, ownId);
+                    if (vres == null) {
+                        // граф видимости не связал старт с целью — не бросаем точку, а достраиваем
+                        // её обычным поиском по сетке: неподключённая точка стоит штрафа в 100 млн
+                        visibilityFailed = true;
+                        diag.info("ROUTE_VISIBILITY_FALLBACK", "Точка " + cp.id + ": граф видимости из выхода №"
+                                + tried + " не дал пути, трасса достроена поиском по растровой сетке", cp.id);
+                    } else {
+                        pr.expanded = vres.expanded;
+                        pr.routeCost = vres.cost;
+                        commitPath(cp, exit, w, vres.path, vres.goalIndex, nb, pr, diag, strategy);
+                        return true;
+                    }
+                }
                 AStarRouter router = new AStarRouter(w, cnew, turnPenalty, directions, strategy.sharpTurnFactor, rr.maxTurnDeg);
                 AStarRouter.Result res = router.route(startCell, exit.direction);
                 if (res == null) {
@@ -323,8 +348,14 @@ public class RoutePlanner {
 
     /** Переносит найденный путь в строящуюся сеть: узлы, рёбра, разрезы по спецзонам и по целям. */
     private void commit(ConnectionPoint cp, ExitFinder.Exit exit, RasterWindow w, AStarRouter.Result res, NetworkBuilder nb, PointResult pr, Diagnostics diag, Strategy strategy) {
-        List<Coordinate> path = PathSimplifier.simplify(w, res.cells, strategy.sharpTurnFactor <= 1);
-        RasterWindow.Goal goal = w.goals.get(res.goalIndex);
+        commitPath(cp, exit, w, PathSimplifier.simplify(w, res.cells, strategy.sharpTurnFactor <= 1),
+                res.goalIndex, nb, pr, diag, strategy);
+    }
+
+    /** Общая часть переноса найденной ломаной в сеть — для обоих методов поиска. */
+    private void commitPath(ConnectionPoint cp, ExitFinder.Exit exit, RasterWindow w, List<Coordinate> path,
+                            int goalIndex, NetworkBuilder nb, PointResult pr, Diagnostics diag, Strategy strategy) {
+        RasterWindow.Goal goal = w.goals.get(goalIndex);
         // точный конец: проекция последней клетки на геометрию цели
         Coordinate last = path.get(path.size() - 1);
         Coordinate exact = nearestOn(goal.geom, last);

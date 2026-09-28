@@ -105,6 +105,11 @@ public class GeoJsonWriter {
         // подпись «какой это вариант»: стратегия трассировки словами (дополнительный атрибут сводки)
         if (v.name != null) g.writeStringField("variant_name", v.name);
         if (v.description != null) g.writeStringField("variant_description", v.description);
+        // метод поиска и время по этапам: видно, чем получен вариант и сколько это стоило
+        g.writeStringField("routing_method", v.routingMethod);
+        g.writeNumberField("routing_millis", v.routingMillis);
+        g.writeNumberField("engineering_millis", v.engineeringMillis);
+        g.writeNumberField("compute_millis", v.computeMillis);
         g.writeNumberField("construction_cost", Math.round(v.constructionCost));
         g.writeNumberField("chamber_construction_cost", Math.round(v.chamberConstructionCost));
         g.writeNumberField("existing_chamber_tie_in_count", v.existingChamberTieInCount);
