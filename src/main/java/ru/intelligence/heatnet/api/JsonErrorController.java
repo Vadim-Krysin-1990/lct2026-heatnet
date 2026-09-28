@@ -5,6 +5,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Hidden;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServletRequest;
@@ -16,6 +17,7 @@ import java.util.Map;
  * а по неверному обращению возвращает подсказку, что и каким методом вызывать.
  */
 @RestController
+@Hidden   // служебный обработчик ошибок, в документации API не нужен
 public class JsonErrorController implements ErrorController {
 
     @RequestMapping(value = "/error", produces = MediaType.APPLICATION_JSON_VALUE)

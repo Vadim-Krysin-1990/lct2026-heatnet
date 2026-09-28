@@ -28,26 +28,45 @@ public class RulesController {
         this.events = events;
     }
 
-    @Operation(summary = "Справочник расчёта (табл. 4.1, 4.2, 8.2, 8.3, 9 ТП)")
+    @Operation(summary = "Справочник расчёта: диаметры, цены, камеры, веса ранжирования",
+            description = "Таблица 1 технического приложения и связанные параметры: для каждого условного "
+                    + "диаметра — пропускная способность в т/ч, предельная длина непрерывного участка, цена метра "
+                    + "нового строительства и расчётные габариты пары труб. Дальше — стоимость камер и врезки, "
+                    + "штраф за неподключённую точку, веса показателя S и параметры расчёта глубины. "
+                    + "Редактируется в файле rules/reference.yml без пересборки сервиса.")
     @GetMapping("/reference")
     public Object reference() { return rules.reference(); }
 
-    @Operation(summary = "Правила пространственных ограничений (табл. 5.1 ТП)")
+    @Operation(summary = "Правила ограничений: от чего и на сколько отступать",
+            description = "Таблица 2 технического приложения по типам городских объектов. Для каждого типа: "
+                    + "запрет прохода или специальный проход, минимальное расстояние в метрах, ширина зоны "
+                    + "специального участка, минимальный угол пересечения и коэффициент удорожания. "
+                    + "У каждого правила указан источник — пункт приложения или свода правил, чтобы эксперт "
+                    + "видел, откуда взято число. Редактируется в rules/restrictions.yml.")
     @GetMapping("/restrictions")
     public Object restrictions() { return rules.restrictions(); }
 
-    @Operation(summary = "Параметры трассировки")
+    @Operation(summary = "Параметры трассировки: шаг сетки, штрафы, стратегии",
+            description = "Настройки алгоритма, не являющиеся нормативными: шаг растровой сетки поиска, "
+                    + "штрафы за поворот, предельный угол поворота, радиус поиска мест присоединения, "
+                    + "число вариантов в выдаче и перечень стратегий. Ими настраивается качество трассы: "
+                    + "чем больше штраф за поворот, тем длиннее прямые участки. Файл rules/routing.yml.")
     @GetMapping("/routing")
     public Object routing() { return rules.routing(); }
 
-    @Operation(summary = "Исходный YAML правил")
+    @Operation(summary = "Исходный YAML правил как текст",
+            description = "Отдаёт файл правил в том виде, в каком его читает сервис, — вместе с комментариями "
+                    + "и ссылками на источники. Имена: reference, restrictions, routing.")
     @GetMapping(value = "/yaml/{name}", produces = MediaType.TEXT_PLAIN_VALUE)
     public String yaml(@org.springframework.web.bind.annotation.PathVariable String name) throws IOException {
         if (!name.matches("reference|restrictions|routing")) throw new IllegalArgumentException("name ∈ reference|restrictions|routing");
         return rules.rawYaml(name + ".yml");
     }
 
-    @Operation(summary = "Перечитать правила из каталога HEATNET_RULES / classpath")
+    @Operation(summary = "Перечитать правила с диска",
+            description = "Применяет изменения в YAML без перезапуска сервиса: правку норматива или цены "
+                    + "делает эксперт, а не программист. Читается каталог из HEATNET_RULES, если он задан, "
+                    + "иначе встроенные правила. В ответе — что получилось загрузить; событие пишется в журнал.")
     @PostMapping("/reload")
     public Map<String, Object> reload() {
         rules.reload();

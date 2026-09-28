@@ -35,12 +35,19 @@ public class SampleController {
     static {
         FILES.put("dataset", "contest_dataset.geojson");
         FILES.put("result", "contest_result.geojson");
+        // набор с подземными коммуникациями и его расчёт в режиме глубины: в конкурсном наборе
+        // пересекать нечего, поэтому продольный профиль показывать не на чем
+        FILES.put("depth_dataset", "depth_demo_dataset.geojson");
+        FILES.put("depth_result", "depth_demo_result.geojson");
     }
 
     @Value("${heatnet.samples-dir:data/samples}")
     private String samplesDir;
 
-    @Operation(summary = "Список доступных образцов")
+    @Operation(summary = "Какие образцы данных есть на сервисе",
+            description = "Готовые файлы, чтобы попробовать сервис без своих данных: конкурсный набор, "
+                    + "его расчёт, а также набор с подземными коммуникациями и его расчёт в режиме глубины. "
+                    + "Просмотрщик подтягивает их автоматически.")
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> list() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -55,7 +62,10 @@ public class SampleController {
         return m;
     }
 
-    @Operation(summary = "Образец: dataset — конкурсный набор, result — результат его расчёта")
+    @Operation(summary = "Скачать образец данных",
+            description = "dataset — конкурсный набор; result — результат его расчёта; "
+                    + "depth_dataset — тот же набор с добавленными газопроводами и кабелем; "
+                    + "depth_result — его расчёт в режиме глубины (для продольного профиля).")
     @GetMapping(path = "/{name}", produces = "application/geo+json")
     public ResponseEntity<Resource> sample(@PathVariable String name) {
         String file = FILES.get(name);

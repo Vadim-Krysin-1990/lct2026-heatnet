@@ -43,13 +43,16 @@ public class JobController {
         this.jobs = jobs;
     }
 
-    @Operation(summary = "Загрузить входной GeoJSON и поставить расчёт в очередь",
+    @Operation(summary = "Поставить расчёт в очередь (для больших файлов)",
             description = "Файл сохраняется на диск потоково (ТЗ 3.2, до 3 ГБ). Возвращает id задания.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> submit(
             @Parameter(description = "Входной файл GeoJSON (FeatureCollection, WGS 84)") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Дополнительная задача: трассировка с учётом глубины") @RequestParam(name = "depth", defaultValue = "false") boolean depth,
-            @Parameter(description = "Сколько вариантов включить в выдачу; 0 — по правилам (ТП §2.8: до трёх)") @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
+            @Parameter(description = "Считать с учётом глубины заложения — отдельный набор вариантов "
+                    + "с продольным профилем у пересечений подземных коммуникаций")
+            @RequestParam(name = "depth", defaultValue = "false") boolean depth,
+            @Parameter(description = "Сколько вариантов вернуть; 0 — по правилам приложения, до трёх")
+            @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
         JobEntity j;
         try (InputStream in = file.getInputStream()) {
@@ -58,7 +61,9 @@ public class JobController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(toMap(j));
     }
 
-    @Operation(summary = "Список последних заданий")
+    @Operation(summary = "Список последних заданий",
+            description = "Кто и что считал: имя файла, размер, статус, время расчёта, лучший вариант. "
+                    + "Удобно, чтобы найти идентификатор задания, если он потерялся.")
     @GetMapping
     public List<Map<String, Object>> list() {
         List<Map<String, Object>> out = new ArrayList<>();
@@ -66,13 +71,20 @@ public class JobController {
         return out;
     }
 
-    @Operation(summary = "Статус задания")
+    @Operation(summary = "Статус задания: готово или ещё считается",
+            description = "Опрашивайте этот метод, пока status не станет DONE или FAILED. Значения: "
+                    + "QUEUED — ждёт свободного расчётчика, RUNNING — считается, DONE — готово (result_url "
+                    + "укажет, откуда забрать файл), FAILED — не получилось, причина в поле error и в диагностике. "
+                    + "У готового задания видны время расчёта, число вариантов и показатели лучшего из них.")
     @GetMapping("/{id}")
     public Map<String, Object> status(@PathVariable String id) {
         return toMap(find(id));
     }
 
-    @Operation(summary = "Результат: выходной GeoJSON (ТП §10)")
+    @Operation(summary = "Забрать результат расчёта",
+            description = "Выходной GeoJSON того же состава, что у синхронного метода: участки новой сети, "
+                    + "тепловые камеры, технические узлы и сводка по каждому варианту. Доступен только когда "
+                    + "задание завершилось успешно; отдаётся потоком, файл не собирается в памяти целиком.")
     @GetMapping(value = "/{id}/result", produces = "application/geo+json")
     public ResponseEntity<FileSystemResource> result(@PathVariable String id) {
         JobEntity j = find(id);
@@ -86,7 +98,13 @@ public class JobController {
                 .body(res);
     }
 
-    @Operation(summary = "Диагностика входных данных и расчёта")
+    @Operation(summary = "Диагностика: что было не так с данными и как считалось",
+            description = "Разбор входного файла и хода расчёта: пропущенные и восстановленные атрибуты, "
+                    + "невалидная геометрия, какие объекты пропущены как лежащие вне области расчёта, "
+                    + "выбранный азимут сетки, качество геометрии каждого варианта, проверка отступов по "
+                    + "фактическим диаметрам, причины, по которым точка осталась без трассы. "
+                    + "Уровни сообщений: ERROR — данные не приняты, WARNING — принято с оговоркой, INFO — "
+                    + "пояснение к расчёту.")
     @GetMapping("/{id}/diagnostics")
     public Map<String, Object> diagnostics(@PathVariable String id) throws IOException {
         JobEntity j = find(id);

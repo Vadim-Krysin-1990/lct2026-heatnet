@@ -29,7 +29,12 @@ public class EventController {
         this.events = events;
     }
 
-    @Operation(summary = "Список событий", description = "Фильтры по коду события, уровню, пользователю и периоду; сортировка — от новых к старым.")
+    @Operation(summary = "Журнал: кто, когда и что запускал",
+            description = "Действия и расчёты сервиса от новых к старым. Коды событий: PROCESS_START — принят "
+                    + "файл, PROCESS_DONE — расчёт выполнен (в подробностях длина и стоимость лучшего варианта), "
+                    + "VALIDATION_FAILED — данные не прошли проверку, JOB_DONE и JOB_FAILED — задания очереди, "
+                    + "RULES_RELOADED — перечитаны правила, LOGIN — вход пользователя. У каждой записи есть "
+                    + "X-Request-Id: по нему запись сопоставляется с обращением вызывающей системы.")
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> list(
             @Parameter(description = "Код события, например PROCESS_DONE") @RequestParam(required = false) String type,
@@ -50,7 +55,9 @@ public class EventController {
         return m;
     }
 
-    @Operation(summary = "Сводка по журналу", description = "Сколько событий каждого вида записано.")
+    @Operation(summary = "Сводка по журналу: сколько событий какого вида",
+            description = "Быстрый ответ на вопрос «сколько расчётов сервис выполнил и сколько раз данные "
+                    + "не прошли проверку» — без выгрузки всего журнала.")
     @GetMapping(path = "/stats", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> stats() {
         return events.stats();

@@ -43,7 +43,11 @@ public class AuthController {
         this.events = events;
     }
 
-    @Operation(summary = "Настройки входа для клиента")
+    @Operation(summary = "Нужен ли вход и куда идти за токеном",
+            description = "Режимы: off — сервис открыт, токены не проверяются (так он работает при конкурсной "
+                    + "проверке, одним docker-compose up и без внешних систем); optional — вход доступен, роли "
+                    + "видны в журнале, но доступ без входа не закрыт; required — без токена доступа нет. "
+                    + "В ответе адрес поставщика токенов и идентификатор клиента для потока authorization code + PKCE.")
     @GetMapping(path = "/config", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> config() {
         String resolved = mode != null && !mode.isBlank() ? mode.trim().toLowerCase() : (enabled ? "required" : "off");
@@ -58,7 +62,9 @@ public class AuthController {
         return m;
     }
 
-    @Operation(summary = "Кто выполняет запрос")
+    @Operation(summary = "Кто выполняет запрос и с какими правами",
+            description = "Имя пользователя из токена и его роли. Без токена отвечает, что запрос анонимный: "
+                    + "это не ошибка, если вход не обязателен.")
     @GetMapping(path = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> me(Authentication auth) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -76,7 +82,9 @@ public class AuthController {
         return m;
     }
 
-    @Operation(summary = "Отметить вход пользователя в журнале событий")
+    @Operation(summary = "Отметить вход в журнале событий",
+            description = "Вызывается интерфейсом после успешного входа, чтобы в журнале осталась запись LOGIN "
+                    + "с именем и ролями. Возвращает то же, что /api/auth/me.")
     @GetMapping(path = "/session", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> session(Authentication auth) {
         Map<String, Object> me = me(auth);

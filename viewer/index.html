@@ -97,6 +97,15 @@
     border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.4; }
   .hint b { display: block; margin-bottom: 3px; }
   .hint a { color: var(--link); }
+  .est { display: grid; gap: 18px; margin-top: 16px; }
+  .est h2 { margin: 0 0 6px; }
+  .est .total { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 14px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 10px; background: var(--accent-soft); }
+  .est .total .sum { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .est .total .per { font-size: 12.5px; color: var(--muted); }
+  table.grid tr.sub td { color: var(--muted); padding-left: 22px; }
+  table.grid tr.totalrow td { border-top: 2px solid var(--line); font-weight: 600; border-bottom: 0; }
   .prof { margin-top: 12px; overflow-x: auto; }
   .prof svg { display: block; min-width: 560px; }
   .prof .surface { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
@@ -120,7 +129,12 @@
   .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
     padding: 14px 16px; background: var(--accent-soft); max-width: 620px; }
   .notice .muted { margin: 4px 0 10px; }
-  #app { display: grid; grid-template-columns: 384px 1fr; height: 100%; min-height: 0; }
+  #app { display: grid; grid-template-columns: var(--panel-w, 384px) 6px 1fr; height: 100%; min-height: 0; }
+  #splitter { cursor: col-resize; background: var(--line); position: relative; }
+  #splitter::after { content: ''; position: absolute; inset: 0 -4px; }
+  #splitter:hover, #splitter.dragging { background: var(--accent); }
+  #splitter .grip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 2px; height: 28px; border-left: 2px dotted var(--paper); }
   #panel { overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
   .brandbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px 12px;
     background: var(--accent); color: #fff; position: sticky; top: 0; z-index: 5; }
@@ -174,7 +188,13 @@
   #mapwrap { position: relative; overflow: hidden; height: 100%; min-width: 0; background: #eceeee; }
   #map { position: absolute; transform-origin: 50% 50%; transform: rotate(var(--rot, 0deg)); }
   .up { display: inline-block; transform: rotate(calc(-1 * var(--rot, 0deg))); transform-origin: 50% 50%; }
+  /* Leaflet позиционирует подписи и значки через transform, поэтому компенсацию поворота
+     вешаем на внутренний слой: содержимое остаётся горизонтальным при любом угле карты */
+  .leaflet-tooltip.dn > .up, .leaflet-marker-icon > .up { will-change: transform; }
   .leaflet-popup-content-wrapper { transform: rotate(calc(-1 * var(--rot, 0deg))); }
+  .leaflet-popup-content { margin: 12px 14px; min-width: 240px; max-width: 340px; }
+  .leaflet-popup-content table td:first-child { white-space: nowrap; padding-right: 14px; color: var(--muted); }
+  .leaflet-popup-content table td:last-child { text-align: right; white-space: normal; word-break: break-word; }
   .rotated .leaflet-popup-tip-container { display: none; }
 
   .compass { position: absolute; right: 14px; top: 14px; z-index: 600; width: 46px; height: 46px;
@@ -213,7 +233,8 @@
     .appbar { flex-wrap: wrap; gap: 8px; }
     .appbar .who { display: none; }
     .tabs { overflow-x: auto; }
-    #app { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 6px 60vh; }
+    #splitter { cursor: row-resize; }
     #panel { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
   }
 </style>
@@ -250,6 +271,7 @@
 <nav class="tabs" role="tablist">
   <button type="button" role="tab" data-page="map" aria-selected="true">Карта</button>
   <button type="button" role="tab" data-page="variants" aria-selected="false">Варианты</button>
+  <button type="button" role="tab" data-page="estimate" aria-selected="false">Смета</button>
   <button type="button" role="tab" data-page="profile" aria-selected="false">Профиль по глубине</button>
   <button type="button" role="tab" data-page="benchmark" aria-selected="false">Сравнение с эталоном</button>
   <button type="button" role="tab" data-page="log" aria-selected="false">Журнал событий</button>
@@ -299,6 +321,7 @@
     </div>
     </div>
   </div>
+  <div id="splitter" title="Потяните, чтобы изменить ширину панели. Двойной клик — свернуть"><div class="grip"></div></div>
   <div id="mapwrap">
     <div id="map"></div>
     <button type="button" class="compass" id="compass" aria-pressed="false"
@@ -330,6 +353,21 @@
   </div>
 </section>
 
+<section class="page" id="page-estimate">
+  <div class="page-inner">
+    <h1>Смета варианта</h1>
+    <div class="muted">Стоимость по справочнику технического приложения: участки считаются по длине и
+      цене метра для своего диаметра с коэффициентами специального прохода и глубины, камеры — по
+      наибольшему примыкающему диаметру, врезка в существующую камеру — фиксированной суммой за каждый
+      входящий участок. Ниже — разбор итоговой суммы по статьям и по диаметрам.</div>
+    <div class="toolbar">
+      <select id="estVariant"></select>
+      <button type="button" id="estPrint">Открыть паспорт варианта</button>
+    </div>
+    <div id="estBox"></div>
+  </div>
+</section>
+
 <section class="page" id="page-profile">
   <div class="page-inner">
     <h1>Продольный профиль трассы</h1>
@@ -339,6 +377,7 @@
       подключения до места присоединения.</div>
     <div class="toolbar">
       <select id="profChain"></select>
+      <button type="button" id="profDemo">Загрузить пример с коммуникациями</button>
       <span class="muted" id="profHint"></span>
     </div>
     <div id="profBox"></div>
@@ -439,6 +478,7 @@
     if (name === 'variants') renderVariantTable();
     if (name === 'benchmark') renderBenchmark();
     if (name === 'profile') renderProfile();
+    if (name === 'estimate') renderEstimate();
     if (name === 'log') loadLog();
     try { localStorage.setItem(NS + '.tab', name); } catch (e) { /* приватный режим */ }
   }
@@ -470,6 +510,34 @@
   let savedBrand = 'mos';
   try { savedBrand = localStorage.getItem(NS + '.brand') || 'mos'; } catch (e) { /* нет доступа к хранилищу */ }
   setBrand(brands[savedBrand] ? savedBrand : 'mos');
+
+  // ---------- ширина панели: перетаскиваемая граница ----------
+  (function splitter() {
+    const el = document.getElementById('splitter'), app = document.getElementById('app');
+    const KEY = NS + '.panelW';
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) { /* приватный режим */ }
+    if (saved) app.style.setProperty('--panel-w', saved);
+    let dragging = false, prev = null;
+    const apply = px => {
+      const w = Math.max(0, Math.min(px, window.innerWidth - 260));
+      app.style.setProperty('--panel-w', w + 'px');
+      try { localStorage.setItem(KEY, w + 'px'); } catch (e) { /* приватный режим */ }
+      if (window._hnMap) layout();
+    };
+    el.addEventListener('pointerdown', e => {
+      dragging = true; el.classList.add('dragging');
+      el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    window.addEventListener('pointermove', e => { if (dragging) apply(e.clientX - app.getBoundingClientRect().left); });
+    window.addEventListener('pointerup', () => { dragging = false; el.classList.remove('dragging'); });
+    // двойной клик сворачивает панель и разворачивает обратно
+    el.addEventListener('dblclick', () => {
+      const cur = parseInt(getComputedStyle(app).getPropertyValue('--panel-w'), 10) || 384;
+      if (cur > 40) { prev = cur; apply(0); } else { apply(prev || 384); }
+    });
+  })();
 
   const wrap = document.getElementById('mapwrap'), mapEl = document.getElementById('map');
   let rot = 0, canvasSize = 0;
@@ -617,6 +685,10 @@
     cost: 'Стоимость', laying_method: 'Способ прокладки', depth_start: 'Глубина в начале, м',
     depth_end: 'Глубина в конце, м', start_node_id: 'Начальный узел', end_node_id: 'Конечный узел',
     upstream_object_id: 'Вышестоящий объект', oks_id: 'ОКС', name: 'Наименование',
+    address: 'Адрес', floors: 'Этажность', year: 'Год постройки', area: 'Площадь, м²',
+    purpose: 'Назначение', status: 'Статус', comment: 'Примечание', source: 'Источник данных',
+    material: 'Материал', pressure: 'Давление', voltage: 'Напряжение', width: 'Ширина, м',
+    category: 'Категория', owner: 'Владелец', note: 'Примечание',
     construction_cost: 'Стоимость строительства', chamber_construction_cost: 'Стоимость новых камер',
     existing_chamber_tie_in_count: 'Врезок в существующие камеры', existing_chamber_tie_in_cost: 'Стоимость врезок',
     unconnected_penalty: 'Штраф за неподключённые', calculated_cost: 'Итоговая расчётная стоимость',
@@ -725,6 +797,7 @@
     result = fc;
     if (document.getElementById('page-benchmark').classList.contains('active')) setTimeout(renderBenchmark, 0);
     document.getElementById('profChain').dataset.variant = '';
+    document.getElementById('estVariant').dataset.filled = '';
     if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
     const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
     const box = document.getElementById('variants'); box.innerHTML = '';
@@ -853,6 +926,220 @@
     <p class="muted">Показать вариант на карте — вкладка «Карта», кнопки слева.</p>`;
   }
 
+  // ---------- экран «Смета» ----------
+  /** Разбор итоговой суммы варианта по статьям и диаметрам — по данным выходного файла. */
+  function estimateOf(vid) {
+    const F = t => result.features.filter(f => f.properties.variant_id === vid && f.properties.object_type === t);
+    const net = F('heat_network'), ch = F('heat_chamber'), nodes = F('technical_node');
+    const sum = (result.features.find(f => f.properties.object_type === 'variant_summary'
+      && f.properties.variant_id === vid) || {}).properties || {};
+    const byDn = {};
+    net.forEach(f => {
+      const p = f.properties, d = p.diameter;
+      const r = byDn[d] = byDn[d] || { dn: d, count: 0, len: 0, cost: 0, special: 0 };
+      r.count++; r.len += p.length || 0; r.cost += p.cost || 0;
+      if (p.laying_method === 'special') r.special += p.length || 0;
+    });
+    const chByDn = {};
+    ch.forEach(f => {
+      const p = f.properties, d = p.diameter;
+      const r = chByDn[d] = chByDn[d] || { dn: d, count: 0, cost: 0 };
+      r.count++; r.cost += p.cost || 0;
+    });
+    return {
+      sum, net, ch, nodes,
+      byDn: Object.values(byDn).sort((a, b) => a.dn - b.dn),
+      chByDn: Object.values(chByDn).sort((a, b) => a.dn - b.dn),
+      segCost: net.reduce((a, f) => a + (f.properties.cost || 0), 0),
+      chCost: ch.reduce((a, f) => a + (f.properties.cost || 0), 0)
+    };
+  }
+
+  function renderEstimate() {
+    const box = document.getElementById('estBox'), sel = document.getElementById('estVariant');
+    if (!result) { box.innerHTML = '<span class="muted">загрузите результат расчёта</span>'; return; }
+    const ids = [...new Set(result.features.map(f => f.properties.variant_id))]
+      .filter(Boolean).sort((a, b) => Number(a) - Number(b));
+    if (sel.dataset.filled !== ids.join(',')) {
+      sel.dataset.filled = ids.join(',');
+      sel.innerHTML = ids.map(id => {
+        const s = result.features.find(f => f.properties.object_type === 'variant_summary'
+          && f.properties.variant_id === id);
+        return `<option value="${id}">${(s && s.properties.variant_name) || ('Вариант ' + id)}</option>`;
+      }).join('');
+      if (current) sel.value = current;
+    }
+    const vid = sel.value || ids[0];
+    const e = estimateOf(vid);
+    const s = e.sum;
+    const total = Number(s.calculated_cost || 0);
+    const tieCost = Number(s.existing_chamber_tie_in_cost || 0);
+    const tieCount = Number(s.existing_chamber_tie_in_count || 0);
+    const penalty = Number(s.unconnected_penalty || 0);
+    const len = Number(s.new_network_length || 0);
+    const share = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+    const n = (x, d = 1) => Number(x).toLocaleString('ru-RU', { maximumFractionDigits: d });
+
+    box.innerHTML = `<div class="est">
+      <div class="total">
+        <span class="sum">${rub(total)}</span>
+        <span class="per">итоговая расчётная стоимость · ${n(len, 0)} м новой сети ·
+          ${rub(len ? total / len : 0)} за метр трассы · показатель S = ${s.score ?? '—'}</span>
+      </div>
+
+      <div>
+        <h2>По статьям затрат</h2>
+        <table class="grid">
+          <tr><th>Статья</th><th class="num">Количество</th><th class="num">Сумма</th><th class="num">Доля</th></tr>
+          <tr><td>Строительство участков сети</td><td class="num">${e.net.length} шт · ${n(len, 0)} м</td>
+              <td class="num">${rub(e.segCost)}</td><td class="num">${share(e.segCost)}</td></tr>
+          <tr><td>Новые тепловые камеры</td><td class="num">${e.ch.length} шт</td>
+              <td class="num">${rub(e.chCost)}</td><td class="num">${share(e.chCost)}</td></tr>
+          <tr><td>Врезки в существующие камеры</td><td class="num">${tieCount} шт</td>
+              <td class="num">${rub(tieCost)}</td><td class="num">${share(tieCost)}</td></tr>
+          <tr><td>Технические узлы</td><td class="num">${e.nodes.length} шт</td>
+              <td class="num">входят в стоимость участков</td><td class="num">—</td></tr>
+          ${penalty > 0 ? `<tr><td>Штраф за неподключённые точки</td>
+              <td class="num">${(s.unconnected_oks_ids || []).length} шт</td>
+              <td class="num">${rub(penalty)}</td><td class="num">${share(penalty)}</td></tr>` : ''}
+          <tr class="totalrow"><td>Итого</td><td class="num"></td>
+              <td class="num">${rub(total)}</td><td class="num">100%</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Участки сети по диаметрам</h2>
+        <table class="grid">
+          <tr><th>Условный диаметр</th><th class="num">Участков</th><th class="num">Длина, м</th>
+              <th class="num">В спецпроходах, м</th><th class="num">Цена метра</th><th class="num">Сумма</th></tr>
+          ${e.byDn.map(r => `<tr>
+            <td>ДУ ${r.dn}</td><td class="num">${r.count}</td><td class="num">${n(r.len)}</td>
+            <td class="num">${r.special > 0 ? n(r.special) : '—'}</td>
+            <td class="num">${rub(r.len ? r.cost / r.len : 0)}</td>
+            <td class="num">${rub(r.cost)}</td></tr>`).join('')}
+          <tr class="totalrow"><td>Итого</td><td class="num">${e.net.length}</td><td class="num">${n(len)}</td>
+              <td class="num"></td><td class="num"></td><td class="num">${rub(e.segCost)}</td></tr>
+        </table>
+        <div class="muted" style="margin-top:6px">Цена метра выше справочной там, где участок идёт
+          специальным проходом или с заглублением: в стоимость входят коэффициенты K<sub>спец</sub> и K<sub>гл</sub>.</div>
+      </div>
+
+      <div>
+        <h2>Камеры и узлы</h2>
+        <table class="grid">
+          <tr><th>Объект</th><th class="num">Количество</th><th class="num">Сумма</th></tr>
+          ${e.chByDn.map(r => `<tr><td>Тепловая камера ДУ ${r.dn}</td>
+             <td class="num">${r.count}</td><td class="num">${rub(r.cost)}</td></tr>`).join('')}
+          ${tieCount > 0 ? `<tr><td>Врезка в существующую камеру</td><td class="num">${tieCount}</td>
+             <td class="num">${rub(tieCost)}</td></tr>` : ''}
+          <tr><td>Технический узел (смена диаметра, способа прокладки, глубины)</td>
+              <td class="num">${e.nodes.length}</td><td class="num">—</td></tr>
+          <tr class="totalrow"><td>Итого узлов</td>
+              <td class="num">${e.ch.length + tieCount + e.nodes.length}</td>
+              <td class="num">${rub(e.chCost + tieCost)}</td></tr>
+        </table>
+      </div>
+
+      <div class="muted">Стоимость новой камеры включает присоединение к существующей сети, поэтому
+        отдельной врезки при её строительстве нет. Врезка начисляется только за каждый новый участок,
+        приходящий в уже существующую камеру. Суммы приведены без НДС, в ценах справочника
+        технического приложения.</div>
+    </div>`;
+  }
+  document.getElementById('estVariant').addEventListener('change', renderEstimate);
+
+  /** Паспорт варианта: ведомость для печати — то, что передают дальше в работу. */
+  document.getElementById('estPrint').addEventListener('click', () => {
+    if (!result) { alert('Сначала загрузите результат расчёта'); return; }
+    const vid = document.getElementById('estVariant').value;
+    const e = estimateOf(vid), s = e.sum;
+    const n = (x, d = 1) => Number(x).toLocaleString('ru-RU', { maximumFractionDigits: d });
+    const today = new Date().toLocaleDateString('ru-RU');
+    const brandName = document.getElementById('brandTitle').textContent;
+    const rows = e.net.map((f, i) => {
+      const p = f.properties;
+      return `<tr><td>${i + 1}</td><td>${p.id}</td><td>${p.start_node_id} → ${p.end_node_id}</td>
+        <td class="n">${p.diameter}</td><td class="n">${n(p.length)}</td>
+        <td class="n">${n(p.flow_tph)}</td>
+        <td>${p.laying_method === 'special' ? 'спец. проход' : 'обычная'}</td>
+        <td class="n">${p.depth_start != null ? n(p.depth_start, 2) + ' → ' + n(p.depth_end, 2) : '3,00'}</td>
+        <td class="n">${rub(p.cost)}</td></tr>`;
+    }).join('');
+    const chRows = e.ch.map((f, i) => `<tr><td>${i + 1}</td><td>${f.properties.id}</td>
+        <td class="n">ДУ ${f.properties.diameter}</td><td class="n">${rub(f.properties.cost)}</td></tr>`).join('');
+    const w = window.open('', '_blank');
+    if (!w) { alert('Браузер заблокировал окно паспорта. Разрешите всплывающие окна для этого адреса.'); return; }
+    w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8">
+      <title>Паспорт варианта ${vid}</title>
+      <style>
+        body { font: 12px/1.45 "Golos Text", Arial, sans-serif; color: #111; margin: 24px; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        h2 { font-size: 13px; margin: 20px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: #666; }
+        .head { border-bottom: 2px solid #650003; padding-bottom: 10px; margin-bottom: 16px; }
+        .meta { color: #666; font-size: 11px; }
+        table { border-collapse: collapse; width: 100%; font-size: 11px; }
+        th { text-align: left; background: #f3f3f3; border: 1px solid #ccc; padding: 4px 6px; font-weight: 600; }
+        td { border: 1px solid #ddd; padding: 3px 6px; }
+        td.n, th.n { text-align: right; white-space: nowrap; }
+        .sum { font-size: 15px; font-weight: 700; }
+        .note { color: #666; font-size: 10.5px; margin-top: 6px; }
+        tfoot td { font-weight: 600; background: #fafafa; }
+        .sign { margin-top: 32px; display: flex; gap: 60px; font-size: 11px; }
+        .sign div { flex: 1; border-top: 1px solid #999; padding-top: 4px; color: #666; }
+        @media print { body { margin: 12mm; } h2 { page-break-after: avoid; } tr { page-break-inside: avoid; } }
+      </style></head><body>
+      <div class="head">
+        <h1>Паспорт варианта подключения № ${vid}</h1>
+        <div>${s.variant_name || ''}</div>
+        <div class="meta">${brandName} · ЦАТ — цифровой аналитик трасс подключения к тепловым сетям ·
+          расчёт от ${today} · место в ранжировании: ${s.rank ?? '—'}, показатель S = ${s.score ?? '—'}</div>
+      </div>
+
+      <h2>Сводные показатели</h2>
+      <table>
+        <tr><td>Длина новой сети</td><td class="n">${n(s.new_network_length, 0)} м</td>
+            <td>Точек присоединения подключено</td><td class="n">${e.net.length ? (17 - ((s.unconnected_oks_ids || []).length)) : 0}</td></tr>
+        <tr><td>Участков сети</td><td class="n">${e.net.length}</td>
+            <td>Новых тепловых камер</td><td class="n">${e.ch.length}</td></tr>
+        <tr><td>Врезок в существующие камеры</td><td class="n">${s.existing_chamber_tie_in_count ?? 0}</td>
+            <td>Технических узлов</td><td class="n">${e.nodes.length}</td></tr>
+        <tr><td>Стоимость строительства</td><td class="n">${rub(s.construction_cost)}</td>
+            <td>Штраф за неподключённые</td><td class="n">${rub(s.unconnected_penalty || 0)}</td></tr>
+        <tr><td colspan="3"><b>Итоговая расчётная стоимость</b></td>
+            <td class="n sum">${rub(s.calculated_cost)}</td></tr>
+      </table>
+
+      <h2>Ведомость участков новой сети</h2>
+      <table>
+        <thead><tr><th>№</th><th>Идентификатор</th><th>Узлы</th><th class="n">ДУ</th>
+          <th class="n">Длина, м</th><th class="n">Расход, т/ч</th><th>Прокладка</th>
+          <th class="n">Глубина, м</th><th class="n">Стоимость</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="4">Итого</td><td class="n">${n(s.new_network_length)}</td>
+          <td colspan="3"></td><td class="n">${rub(e.segCost)}</td></tr></tfoot>
+      </table>
+
+      <h2>Ведомость тепловых камер</h2>
+      <table>
+        <thead><tr><th>№</th><th>Идентификатор</th><th class="n">Диаметр</th><th class="n">Стоимость</th></tr></thead>
+        <tbody>${chRows}</tbody>
+        <tfoot><tr><td colspan="3">Итого</td><td class="n">${rub(e.chCost)}</td></tr></tfoot>
+      </table>
+
+      <div class="note">Расчёт выполнен автоматически по правилам технического приложения
+        (редакция от 21.09.2026): диаметры подобраны по расходу с проверкой предельной длины
+        непрерывного участка, стоимость — по справочным ценам метра для каждого диаметра
+        с коэффициентами специального прохода и глубины. Документ является предпроектной оценкой
+        и подлежит проверке инженером перед выдачей условий подключения.</div>
+
+      <div class="sign">
+        <div>Расчёт выполнил</div><div>Проверил</div><div>Дата</div>
+      </div>
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  });
+
   // ---------- экран «Профиль по глубине» ----------
   /** Цепочки участков между узлами: от точки подключения до места присоединения. */
   function chainsOf(fc, vid) {
@@ -920,8 +1207,9 @@
       box.innerHTML = `<div class="notice"><b>В этом файле глубины нет.</b>
         <div class="muted">Профиль строится в режиме дополнительной задачи:
         <code>POST /api/process?depth=true</code>. В конкурсном наборе пересекать нечего — в нём нет
-        газопроводов, кабелей и дорог, поэтому вся трасса идёт на обычной отметке 3,0 м. Демонстрационный
-        набор с коммуникациями — <code>data/samples/depth_demo_dataset.geojson</code>.</div></div>`;
+        газопроводов, кабелей и дорог, поэтому вся трасса идёт на обычной отметке 3,0 м.
+        Нажмите «Загрузить пример с коммуникациями» — в нём трасса пересекает два газопровода и
+        силовой кабель, и профиль виден.</div></div>`;
       sel.innerHTML = ''; hint.textContent = '';
       return;
     }
@@ -942,6 +1230,20 @@
   }
   const spread = pts => Math.max(...pts.map(p => p.d)) - Math.min(...pts.map(p => p.d));
   document.getElementById('profChain').addEventListener('change', renderProfile);
+  document.getElementById('profDemo').addEventListener('click', async e => {
+    const b = e.target; const was = b.textContent;
+    b.disabled = true; b.textContent = 'загружаю…';
+    try {
+      const ds = await api('/samples/depth_dataset');
+      const rs = await api('/samples/depth_result');
+      renderInput(ds); renderVariants(rs);
+      document.getElementById('profChain').dataset.variant = '';
+    document.getElementById('estVariant').dataset.filled = '';
+      renderProfile();
+    } catch (err) {
+      alert('Не удалось загрузить пример: ' + err.message);
+    } finally { b.disabled = false; b.textContent = was; }
+  });
 
   function drawProfile(box, pts) {
     const W = 900, H = 260, L = 52, R = 16, T = 22, B = 34;
@@ -1181,9 +1483,93 @@
   document.getElementById('logLevel').addEventListener('change', loadLog);
 
   // ---------- экран «Правила» ----------
+  const rulesIntro = {
+    reference: {
+      title: 'Справочник расчёта — таблица 1 технического приложения',
+      text: 'Для каждого условного диаметра заданы пропускная способность, предельная длина непрерывного '
+        + 'участка одного диаметра, цена метра нового строительства и расчётные габариты пары труб. '
+        + 'Диаметр подбирается как наименьший, чья пропускная способность покрывает расход участка; если при '
+        + 'этом нарушается предельная длина, берётся следующий по ряду. Габариты нужны, чтобы отступ от '
+        + 'препятствия мерить до внешней границы конструкции, а не до оси трубы. Ниже в этом же файле — '
+        + 'стоимость камер и врезки, штраф за неподключённую точку и веса показателя S.'
+    },
+    restrictions: {
+      title: 'Ограничения — таблица 2 технического приложения',
+      text: 'Что сервис обходит и на каком расстоянии. Правило forbidden означает запрет прохода: вокруг '
+        + 'объекта строится запретная зона шириной в минимальное расстояние плюс половина габарита новой сети. '
+        + 'Правило special — специальный проход: пересечь можно, но под углом не меньше указанного и с '
+        + 'коэффициентом удорожания, а участок внутри зоны выделяется в выходных данных отдельно. '
+        + 'У каждого правила заполнено поле source — откуда взято число, чтобы эксперт мог проверить.'
+    },
+    routing: {
+      title: 'Параметры трассировки — настройки алгоритма',
+      text: 'Ненормативная часть: шаг растровой сетки поиска, штрафы за поворот, предельный угол, радиус '
+        + 'поиска мест присоединения, перечень стратегий и квоты вариантов в выдаче. Этими числами '
+        + 'настраивается качество трассы: чем выше штраф за поворот, тем длиннее прямые участки; '
+        + 'sharp_turn_factor делает косой излом дороже прямого угла, потому что поворот 90–130° работает '
+        + 'как самокомпенсация температурных удлинений, а более пологий требует неподвижной опоры.'
+    }
+  };
+  /** Понятные подписи к ключам правил: голый JSON эксперту ничего не объясняет. */
+  const ruleFieldRu = {
+    dn: 'Условный диаметр', capacity_tph: 'Пропускная способность, т/ч',
+    max_length_m: 'Предельная длина участка, м', new_cost_per_m: 'Цена метра, ₽',
+    width_m: 'Расчётная ширина, м', height_m: 'Расчётная высота, м',
+    shell_od_m: 'Наружный диаметр трубы, м', gap_m: 'Зазор между трубами, м',
+    clearance_m: 'Минимальное расстояние, м', zone_margin_m: 'Ширина зоны спецучастка, м',
+    min_crossing_angle_deg: 'Минимальный угол пересечения, °', k_special: 'Коэффициент удорожания',
+    rule: 'Правило', geometry: 'Геометрия', title: 'Наименование', source: 'Источник',
+    base_cost: 'Базовая стоимость камеры, ₽', cost_per_dn: 'Надбавка за диаметр, ₽/мм',
+    max_branches: 'Максимум лучей у камеры', existing_chamber_tie_in_radius_m: 'Радиус правила врезки, м',
+    cost: 'Стоимость, ₽', fixed: 'Фиксированная часть, ₽', per_tph: 'За т/ч, ₽',
+    cost_weight: 'Вес стоимости', length_weight: 'Вес длины', cost_base: 'База стоимости, ₽',
+    length_base: 'База длины, м', grid_step_m: 'Шаг сетки поиска, м',
+    turn_penalty_m: 'Штраф за поворот, м', orthogonal_turn_penalty_m: 'Штраф поворота, инженерные варианты, м',
+    free_angle_turn_penalty_m: 'Штраф поворота, спрямляемые варианты, м',
+    sharp_turn_factor: 'Во сколько раз косой излом дороже прямого угла',
+    max_turn_deg: 'Предельный угол поворота, °', despike_max_m: 'Длина снимаемой «шпильки», м',
+    grid_bearing_deg: 'Азимут сетки, ° (пусто — определяется автоматически)',
+    window_margin_m: 'Запас окна поиска, м', candidate_radius_m: 'Радиус поиска мест присоединения, м',
+    candidate_radius_max_m: 'Предельный радиус поиска, м', max_candidates: 'Кандидатов на точку',
+    max_exit_candidates: 'Направлений выхода из здания', snap_tolerance_m: 'Допуск совпадения узлов, м',
+    max_variants: 'Вариантов в выдаче', normal_depth_m: 'Обычная глубина, м',
+    min_top_depth_m: 'Минимальная глубина, м', max_top_depth_m: 'Предельная глубина, м',
+    max_slope: 'Предельный уклон', k_depth_per_m: 'Надбавка за метр заглубления',
+    position: 'Проход', min_vertical_clearance_m: 'Вертикальный просвет, м',
+    top_depth_m: 'Глубина верха, м', flow_unit: 'Единица расхода', code: 'Код'
+  };
+  const ruleValueRu = v => v === 'forbidden' ? 'запрет прохода'
+    : v === 'special' ? 'специальный проход' : v === 'polygon' ? 'полигон'
+    : v === 'line' ? 'линия' : v === 'any' ? 'сверху или снизу' : v === 'below' ? 'только снизу'
+    : v === 'above' ? 'только сверху' : v;
+
+  function rulesTable(obj, level) {
+    if (obj === null || obj === undefined) return '<span class="muted">не задано</span>';
+    if (Array.isArray(obj)) {
+      if (!obj.length) return '<span class="muted">пусто</span>';
+      if (typeof obj[0] !== 'object') return obj.join(', ');
+      const cols = [...new Set(obj.flatMap(o => Object.keys(o)))];
+      return `<table class="grid"><tr>${cols.map(c => `<th class="${typeof obj[0][c] === 'number' ? 'num' : ''}">${ruleFieldRu[c] || c}</th>`).join('')}</tr>
+        ${obj.map(o => `<tr>${cols.map(c => `<td class="${typeof o[c] === 'number' ? 'num' : ''}">${o[c] === undefined || o[c] === null ? '—'
+          : typeof o[c] === 'number' ? Number(o[c]).toLocaleString('ru-RU') : ruleValueRu(o[c])}</td>`).join('')}</tr>`).join('')}
+      </table>`;
+    }
+    if (typeof obj !== 'object') return ruleValueRu(obj);
+    const rows = Object.entries(obj).map(([k, v]) => {
+      const name = ruleFieldRu[k] || k;
+      if (v && typeof v === 'object') {
+        return `<tr><td colspan="2"><b>${name}</b><div style="margin-top:6px">${rulesTable(v, (level || 0) + 1)}</div></td></tr>`;
+      }
+      return `<tr><td>${name}</td><td class="num">${v === null || v === '' ? '—'
+        : typeof v === 'number' ? Number(v).toLocaleString('ru-RU') : ruleValueRu(v)}</td></tr>`;
+    });
+    return `<table class="grid">${rows.join('')}</table>`;
+  }
+
   document.querySelectorAll('.rbtn').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.rbtn').forEach(x => x.classList.toggle('active', x === b));
     const box = document.getElementById('rulesBox');
+    const kind = b.dataset.rules;
     if (oidc.required && !token) {
       box.innerHTML = accessNotice({ status: 401 }, 'Просмотр правил расчёта');
       bindLoginButtons(box);
@@ -1191,9 +1577,15 @@
     }
     box.innerHTML = '<span class="muted">загружаю…</span>';
     try {
-      const d = await api('/rules/' + b.dataset.rules);
-      box.innerHTML = '<pre style="white-space:pre-wrap;font-size:12px">' +
-        JSON.stringify(d, null, 2).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</pre>';
+      const d = await api('/rules/' + kind);
+      const intro = rulesIntro[kind] || { title: '', text: '' };
+      box.innerHTML = `<div class="est">
+        <div class="verdict"><b>${intro.title}</b>${intro.text}</div>
+        ${rulesTable(d, 0)}
+        <details><summary class="muted" style="cursor:pointer">Показать исходный JSON</summary>
+          <pre style="white-space:pre-wrap;font-size:11.5px">${JSON.stringify(d, null, 2)
+            .replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</pre></details>
+      </div>`;
     } catch (e) {
       box.innerHTML = accessNotice(e, 'Просмотр правил расчёта');
       bindLoginButtons(box);
