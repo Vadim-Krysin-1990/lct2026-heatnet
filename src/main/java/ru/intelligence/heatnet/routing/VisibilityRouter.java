@@ -48,6 +48,8 @@ public class VisibilityRouter {
     private final int maxVertices;
     /** Допуск на касание запретной зоны: короткие заходы у старта и цели не запрещают ребро. */
     private static final double BLOCK_TOLERANCE_M = 0.05;
+    /** Шаг кандидатов врезки вдоль геометрии цели, м. */
+    private static final double GOAL_SAMPLE_STEP_M = 15.0;
 
     private final List<Coordinate> nodes = new ArrayList<>();
     private final List<Geometry> blockers = new ArrayList<>();
@@ -271,13 +273,18 @@ public class VisibilityRouter {
         Coordinate[] near = org.locationtech.jts.operation.distance.DistanceOp
                 .nearestPoints(g, GeoUtil.point(start));
         out.add(new Coordinate(near[0]));
-        Coordinate[] cs = g.getCoordinates();
-        if (cs.length > 2) {
-            // добавляем вершины линии цели с прореживанием: врезка возможна не только в проекции
-            double step = Math.max(1, cs.length / 12.0);
-            for (double i = 0; i < cs.length; i += step) out.add(new Coordinate(cs[(int) i]));
-        } else {
-            for (Coordinate c : cs) out.add(new Coordinate(c));
+        // Кандидаты врезки вдоль цели: не прореживание по числу вершин, а равномерный шаг по длине.
+        // Прореживание пропускало удобные места присоединения на длинных участках сети, и трасса
+        // тянулась к дальней вершине — отсюда лишние метры против растрового поиска, который
+        // видит цель целиком.
+        for (Coordinate c : g.getCoordinates()) out.add(new Coordinate(c));
+        if (g instanceof LineString && g.getLength() > GOAL_SAMPLE_STEP_M) {
+            org.locationtech.jts.linearref.LengthIndexedLine lil =
+                    new org.locationtech.jts.linearref.LengthIndexedLine(g);
+            for (double d = GOAL_SAMPLE_STEP_M; d < g.getLength(); d += GOAL_SAMPLE_STEP_M) {
+                Coordinate c = lil.extractPoint(d);
+                if (c != null) out.add(new Coordinate(c));
+            }
         }
         return out;
     }
