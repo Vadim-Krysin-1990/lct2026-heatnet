@@ -74,17 +74,21 @@ public class ProcessController {
             @Parameter(description = "Сколько вариантов вернуть. 0 — по правилам приложения, то есть до трёх. "
                     + "Сервис всегда считает семь стратегий (инженерные вдоль застройки, кратчайшие со спрямлением "
                     + "и контрольные); большее значение отдаёт их все — удобно, чтобы сравнить подходы на демонстрации")
-            @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
+            @RequestParam(name = "variants", defaultValue = "0") int variants,
+            @Parameter(description = "Какой метод поиска считать: grid — по растровой сетке, быстро (по умолчанию); "
+                    + "visibility — по графу видимости, точнее по геометрии, но в разы дольше; all — оба и сравнение")
+            @RequestParam(name = "methods", defaultValue = "grid") String methods) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
         Map<String, Object> ev = new LinkedHashMap<>();
         ev.put("file", file.getOriginalFilename());
         ev.put("size_bytes", file.getSize());
         ev.put("depth", depth);
         ev.put("variants_requested", variants);
+        ev.put("methods", methods);
         events.info("PROCESS_START", "Принят файл на синхронный расчёт: " + file.getOriginalFilename(), ev);
         JobService.SyncResult r;
         try (InputStream in = file.getInputStream()) {
-            r = jobs.processSync(in, depth, variants);
+            r = jobs.processSync(in, depth, variants, methods);
         }
         if (r.model.diagnostics.hasErrors()) {
             Map<String, Object> bad = new LinkedHashMap<>(ev);

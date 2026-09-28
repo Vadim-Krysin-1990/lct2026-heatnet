@@ -65,6 +65,8 @@ public class RoutePlanner {
         public boolean visibility = false;
         /** Короткое название варианта («какой он») для подписи в выдаче. */
         public String title;
+        /** Категория: engineering — инженерный, shortest — минимальный, control — контрольный. */
+        public String kind = "control";
         public String description;
     }
 
@@ -202,7 +204,15 @@ public class RoutePlanner {
                     // маска запретных зон и как источник целей
                     VisibilityRouter vr = new VisibilityRouter(w, field, cnew, turnPenalty, rr.maxTurnDeg,
                             rr.visibilityVertexOffsetM, rr.visibilityMaxVertices);
-                    Double bearing = exit.direction >= 0 ? (w.bearingDeg + exit.direction * 45.0) % 360 : null;
+                    // фактический азимут коридора выхода, а не направление в системе сетки:
+                    // иначе проверка поворота на стыке «коридор → путь» работает по чужому углу
+                    Double bearing = null;
+                    if (exit.corridor.size() > 1) {
+                        Coordinate prevPt = exit.corridor.get(exit.corridor.size() - 2);
+                        bearing = GeoUtil.bearingDeg(prevPt, start);
+                    } else if (exit.direction >= 0) {
+                        bearing = (w.bearingDeg + exit.direction * 45.0) % 360;
+                    }
                     String ownId = exit.building != null ? exit.building.id : null;
                     VisibilityRouter.Result vres = vr.route(start, bearing, win, ownId);
                     if (vres == null) {
@@ -211,6 +221,11 @@ public class RoutePlanner {
                         visibilityFailed = true;
                         diag.info("ROUTE_VISIBILITY_FALLBACK", "Точка " + cp.id + ": граф видимости из выхода №"
                                 + tried + " не дал пути, трасса достроена поиском по растровой сетке", cp.id);
+                    } else if (turnsBackAtExit(exit, vres.path, rr.maxTurnDeg)) {
+                        // путь графа уходит обратно мимо здания: выход выбран с противоположной
+                        // от сети стороны — берём следующий выход, а не строим разворот
+                        diag.info("ROUTE_RETRY", "Точка " + cp.id + ": из выхода №" + tried
+                                + " граф видимости разворачивает трассу назад — выход пропущен", cp.id);
                     } else {
                         pr.expanded = vres.expanded;
                         pr.routeCost = vres.cost;
@@ -414,8 +429,11 @@ public class RoutePlanner {
         // Конец пути мог сместиться уже после упрощения (перенос в существующую камеру по правилу 10 м,
         // проекция на цель), поэтому нормализуем геометрию в последнюю очередь: снимаем шпильки и
         // срезаем оставшиеся повороты круче 90° — ТП §2.1 их запрещает.
-        full = mergeCollinear(despike(full, rr.despikeMaxM));
+        double spike = "visibility".equals(routingMethodOf(strategy)) ? rr.despikeMaxM * 2 : rr.despikeMaxM;
+        full = mergeCollinear(despike(full, spike));
         full = mergeCollinear(clampTurns(w, full, rr.maxTurnDeg));
+        // после срезки углов короткое звено могло появиться снова
+        full = mergeCollinear(despike(full, spike));
 
         // разрезать путь по спецзонам: участки со special отдельными рёбрами (ТП §5, §8.1)
         List<List<Coordinate>> pieces = new ArrayList<>();
@@ -514,6 +532,21 @@ public class RoutePlanner {
             }
         }
         return out;
+    }
+
+    private static String routingMethodOf(Strategy s) { return s.visibility ? "visibility" : "grid"; }
+
+    /**
+     * Разворачивает ли найденный путь трассу назад на выходе из здания: угол между коридором
+     * выхода и первым звеном пути не должен превышать предельный (ТП §2.1).
+     */
+    private static boolean turnsBackAtExit(ExitFinder.Exit exit, List<Coordinate> path, double maxTurnDeg) {
+        if (path == null || path.size() < 2 || exit.corridor.size() < 2) return false;
+        Coordinate before = exit.corridor.get(exit.corridor.size() - 2);
+        Coordinate at = exit.exitPoint;
+        Coordinate next = path.get(0).distance(at) < 1e-6 && path.size() > 1 ? path.get(1) : path.get(0);
+        if (next.distance(at) < 1e-6) return false;
+        return PathSimplifier.turnDeg(before, at, next) > maxTurnDeg + 1e-6;
     }
 
     private static List<Coordinate> mergeCollinear(List<Coordinate> pts) {

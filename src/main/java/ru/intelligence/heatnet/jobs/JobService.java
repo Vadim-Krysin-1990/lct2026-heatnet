@@ -104,6 +104,10 @@ public class JobService {
     }
 
     public SyncResult processSync(InputStream in, boolean depth, int variants) throws IOException {
+        return processSync(in, depth, variants, null);
+    }
+
+    public SyncResult processSync(InputStream in, boolean depth, int variants, String methods) throws IOException {
         long t0 = System.currentTimeMillis();
         InputLoader loader = new InputLoader(rules);
         InputModel model = loader.load(new BufferedInputStream(in));
@@ -114,7 +118,7 @@ public class JobService {
             r.variants = new ArrayList<>();
             return r;
         }
-        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants);
+        VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants, methods);
         r.variants = out.variants;
         r.millis = System.currentTimeMillis() - t0;
         return r;
@@ -164,13 +168,16 @@ public class JobService {
             }
             boolean depth = false;
             int variants = 0;
+            String methods = null;
             try {
                 Map<?, ?> opts = json.readValue(j.getOptionsJson() == null ? "{}" : j.getOptionsJson(), Map.class);
                 depth = Boolean.TRUE.equals(opts.get("depth"));
                 Object v = opts.get("variants");
                 if (v instanceof Number) variants = ((Number) v).intValue();
+                Object m = opts.get("methods");
+                if (m != null) methods = String.valueOf(m);
             } catch (Exception ignore) { }
-            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants);
+            VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants, methods);
             Path result = storage.resolve("result").resolve(id + ".geojson");
             try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(result), 1 << 16)) {
                 new GeoJsonWriter(loader.crs(), model.numericIds).write(out.variants, os);

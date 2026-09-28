@@ -13,6 +13,10 @@
 | `technical_node` | Point | `id`, `variant_id` |
 | `variant_summary` | null | `id`, `variant_id`, `rank`, `variant_name`, `variant_description`, `construction_cost`, `chamber_construction_cost`, `existing_chamber_tie_in_count`, `existing_chamber_tie_in_cost`, `unconnected_penalty`, `calculated_cost`, `new_network_length`, `score`, `unconnected_oks_ids` |
 
+`variant_kind` и `variant_kind_title` — категория варианта: `engineering` (инженерный — геометрия
+по практике проектирования), `shortest` (минимальный по расчёту — лучший показатель S),
+`control` (контрольный, для сравнения подходов). Выдача всегда содержит обе основные категории.
+
 `routing_method` показывает, каким методом найдена трасса: `grid` — поиск по растровой сетке,
 `visibility` — по графу видимости. `routing_millis` и `engineering_millis` разделяют время:
 первое — поиск геометрии, второе — расходы, диаметры, узлы и стоимость. `compute_millis` — итог

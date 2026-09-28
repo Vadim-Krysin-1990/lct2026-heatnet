@@ -35,7 +35,11 @@ public class RoutingRules {
     public double snapToleranceM = 0.5;
     public double altTieInExclusionRadiusM = 30.0;
     public int maxVariants = 3;
-    /** Сколько инженерных (ортогональных) вариантов обязательно включать в выдачу. */
+    /** Сколько инженерных вариантов обязательно включать в выдачу (геометрия по практике проектирования). */
+    public int engineeringVariantsInOutput = 2;
+    /** Сколько минимальных по расчёту вариантов обязательно включать в выдачу (лучший показатель S). */
+    public int shortestVariantsInOutput = 2;
+    /** Устаревшее имя квоты инженерных вариантов; оставлено для совместимости конфигураций. */
     public int orthogonalVariantsInOutput = 1;
     /** Сколько вариантов со спрямлением произвольным углом обязательно включать в выдачу (ТП от 21.09 разрешает любой угол до 90°). */
     public int freeAngleVariantsInOutput = 2;
@@ -43,5 +47,6 @@ public class RoutingRules {
     public int visibilityVariantsInOutput = 0;
     /** Предельная длина «шпильки» — микроизлома с поворотом больше 90°, который снимается при сборке трассы. */
     public double despikeMaxM = 2.0;
-    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate", "shared_tree", "separate_parts");
+    public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate",
+            "visibility_shared", "visibility_separate", "shared_tree", "separate_parts");
 }

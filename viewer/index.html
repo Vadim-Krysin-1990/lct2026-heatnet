@@ -161,6 +161,20 @@
   .drop { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; text-align: center;
     color: var(--muted); background: var(--paper); margin-bottom: 8px; font-size: 12.5px; }
   .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .methods { display: grid; gap: 6px; margin: 10px 0 4px; }
+  .methods label { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; background: var(--paper); }
+  .methods label:hover { border-color: var(--accent); }
+  .methods input { margin-top: 2px; }
+  .methods b { font-size: 12.5px; font-weight: 600; }
+  .methods i { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .filerow { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+  .filerow span:first-child { font-weight: 600; word-break: break-all; }
+  .progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 6px 0; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .progress.indeterminate i { width: 40%; animation: run 1.1s ease-in-out infinite; }
+  @keyframes run { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .progress.indeterminate i { animation: none; width: 100%; opacity: .5; } }
   .drop input { display: block; margin: 8px auto 0; font-size: 12px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   button, select { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px;
@@ -173,6 +187,10 @@
   td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: 0; }
   #variants { display: grid; gap: 6px; }
+  .vgroup { margin: 10px 0 2px; }
+  .vgroup:first-child { margin-top: 0; }
+  .vgroup b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); }
+  .vgroup span { font-size: 11.5px; color: var(--muted); }
   .vbtn { display: grid; grid-template-columns: 26px 1fr; align-items: start; gap: 8px; text-align: left;
     padding: 8px 10px; line-height: 1.25; }
   .vbtn .num { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
@@ -293,16 +311,41 @@
     <div class="hint">
       <b>Демонстрационный стенд, вход не требуется.</b>
       Конкурсный набор и результат его расчёта уже загружены — переключайте варианты ниже.
-      Свой файл: перетащите его в поле «Результат сервиса».
+      Свои данные: перетащите файл в поле ниже и нажмите «Рассчитать».
       API — <a href="/swagger-ui.html" target="_blank" rel="noopener">/swagger-ui.html</a>,
       расчёт — <code>POST /api/process</code>.
     </div>
     <div class="muted">Предварительная трассировка для технологического присоединения: места присоединения,
       новые камеры, условные диаметры и стоимость. Расчёт выполняет сервис, страница только показывает результат.</div>
 
-    <h2>Файлы</h2>
-    <div class="drop" id="dropIn">Входной GeoJSON (датасет)<input type="file" id="fileIn" accept=".geojson,.json"></div>
-    <div class="drop" id="dropOut">Результат сервиса (GeoJSON)<input type="file" id="fileOut" accept=".geojson,.json"></div>
+    <h2>Расчёт</h2>
+    <div class="drop" id="dropIn">Исходные данные: GeoJSON с сетью, точками присоединения и ограничениями
+      <input type="file" id="fileIn" accept=".geojson,.json"></div>
+    <div id="calcBox" hidden>
+      <div class="filerow"><span id="calcFile"></span><span class="muted" id="calcSize"></span></div>
+      <div class="methods">
+        <label><input type="radio" name="method" value="grid" checked>
+          <span><b>Быстрый расчёт по сетке</b>
+          <i>поиск по растровой сетке вдоль застройки · около 30 секунд на набор</i></span></label>
+        <label><input type="radio" name="method" value="visibility">
+          <span><b>По графу видимости</b>
+          <i>трасса по касательным к препятствиям, геометрия точнее · в разы дольше</i></span></label>
+        <label><input type="radio" name="method" value="all">
+          <span><b>Оба метода и сравнение</b>
+          <i>считает обоими и ранжирует вместе · самый долгий</i></span></label>
+      </div>
+      <div class="row" style="margin:8px 0">
+        <button type="button" id="calcRun">Рассчитать на сервере</button>
+        <label class="chk" style="margin:0"><input type="checkbox" id="calcDepth"> с учётом глубины</label>
+      </div>
+      <div class="progress" id="calcProgress" hidden><i></i></div>
+      <div class="muted" id="calcStatus"></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary class="muted" style="cursor:pointer">Показать готовый результат из файла</summary>
+      <div class="drop" id="dropOut" style="margin-top:8px">Файл результата, полученный ранее
+        <input type="file" id="fileOut" accept=".geojson,.json"></div>
+    </details>
     <div class="row">
       <label class="chk"><input type="checkbox" id="osm"> подложка OpenStreetMap (нужен интернет)</label>
       <label class="chk"><input type="checkbox" id="money"> подписи стоимости на новых участках</label>
@@ -808,19 +851,37 @@
     if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
     const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
     const box = document.getElementById('variants'); box.innerHTML = '';
+    // варианты сгруппированы по категориям: инженерные и минимальные по расчёту решают разные задачи
+    const order = ['engineering', 'shortest', 'control'];
+    const titles = { engineering: 'Инженерные', shortest: 'Минимальные по расчёту', control: 'Контрольные' };
+    const notes = {
+      engineering: 'геометрия по практике проектирования: длинные прямые вдоль застройки, прямые углы',
+      shortest: 'лучший показатель S по формуле приложения: короче и дешевле',
+      control: 'считаются для сравнения подходов'
+    };
+    const byKind = {};
     ids.forEach(id => {
-      const b = document.createElement('button');
-      b.className = 'vbtn'; b.dataset.variant = id;
       const f = fc.features.find(x => x.properties.object_type === 'variant_summary' && x.properties.variant_id === id);
-      const s = f ? f.properties : {};
-      const name = s.variant_name || ('Вариант ' + id);
-      const figures = s.new_network_length != null
-        ? `${fmt(s.new_network_length)} м · ${rub(s.calculated_cost)} · S=${s.score}` : '';
-      b.innerHTML = `<span class="num">${s.rank || id}</span><span><span class="ttl">${name}</span><br>
-        <span class="fig">${figures}</span></span>`;
-      if (s.variant_description) b.title = s.variant_description;
-      b.addEventListener('click', () => showVariant(id));
-      box.appendChild(b);
+      const p = f ? f.properties : {};
+      (byKind[p.variant_kind || 'control'] = byKind[p.variant_kind || 'control'] || []).push({ id, p });
+    });
+    order.filter(k => byKind[k]).forEach(kind => {
+      const head = document.createElement('div');
+      head.className = 'vgroup';
+      head.innerHTML = `<b>${titles[kind]}</b><span>${notes[kind]}</span>`;
+      box.appendChild(head);
+      byKind[kind].forEach(({ id, p }) => {
+        const b = document.createElement('button');
+        b.className = 'vbtn'; b.dataset.variant = id;
+        const name = p.variant_name || ('Вариант ' + id);
+        const figures = p.new_network_length != null
+          ? `${fmt(p.new_network_length)} м · ${rub(p.calculated_cost)} · S=${p.score}` : '';
+        b.innerHTML = `<span class="num">${p.rank || id}</span><span><span class="ttl">${name}</span><br>
+          <span class="fig">${figures}</span></span>`;
+        if (p.variant_description) b.title = p.variant_description;
+        b.addEventListener('click', () => showVariant(id));
+        box.appendChild(b);
+      });
     });
     if (ids.length) showVariant(ids[0]);
   }
@@ -1736,14 +1797,122 @@
     r.onload = () => { try { cb(JSON.parse(r.result)); } catch (e) { alert('Не удалось разобрать ' + file.name + ': ' + e.message); } };
     r.readAsText(file);
   }
-  function bind(dropId, inputId, handler) {
+  /**
+   * @param handler   получает разобранный GeoJSON (для файлов, которые читаем в браузере)
+   * @param rawHandler получает сам файл — так большие наборы не читаются в память вкладки
+   */
+  function bind(dropId, inputId, handler, rawHandler) {
     const drop = document.getElementById(dropId), input = document.getElementById(inputId);
-    input.addEventListener('change', () => input.files[0] && readFile(input.files[0], handler));
+    const take = f => { if (!f) return; if (rawHandler) rawHandler(f); else readFile(f, handler); };
+    input.addEventListener('change', () => take(input.files[0]));
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && readFile(e.dataTransfer.files[0], handler); });
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); take(e.dataTransfer.files[0]); });
   }
-  bind('dropIn', 'fileIn', renderInput);
+  // ---------- запуск расчёта на сервере ----------
+  let pendingFile = null;
+  const mb = b => (b / 1048576).toFixed(b > 10485760 ? 0 : 1) + ' МБ';
+
+  function pickInput(file) {
+    pendingFile = file;
+    document.getElementById('calcBox').hidden = false;
+    document.getElementById('calcFile').textContent = file.name;
+    document.getElementById('calcSize').textContent = mb(file.size);
+    document.getElementById('calcStatus').textContent = file.size > 200 * 1048576
+      ? 'Большой файл: он уйдёт в очередь заданий, результат подтянется автоматически.'
+      : 'Нажмите «Рассчитать» — файл уйдёт на сервер, результат появится на карте.';
+    // маленький файл сразу показываем на карте, большой не читаем в браузере
+    if (file.size <= 60 * 1048576) {
+      readFile(file, fc => { try { renderInput(fc); } catch (e) { /* покажем после расчёта */ } });
+    } else {
+      document.getElementById('calcStatus').textContent +=
+        ' Предпросмотр исходных данных для такого объёма не строится.';
+    }
+  }
+
+  function setProgress(pct, text, indeterminate) {
+    const box = document.getElementById('calcProgress');
+    box.hidden = false;
+    box.classList.toggle('indeterminate', !!indeterminate);
+    box.querySelector('i').style.width = indeterminate ? '' : Math.max(0, Math.min(100, pct)) + '%';
+    if (text !== undefined) document.getElementById('calcStatus').textContent = text;
+  }
+
+  /** Отправка файла с показом хода загрузки: fetch прогресс выгрузки не отдаёт. */
+  function upload(url, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total * 100); };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch (e) { reject(new Error('сервер вернул не JSON')); }
+        } else {
+          let msg = xhr.status + ' ' + xhr.statusText;
+          try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) { /* текст как есть */ }
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('соединение прервано'));
+      const fd = new FormData();
+      fd.append('file', file);
+      xhr.send(fd);
+    });
+  }
+
+  document.getElementById('calcRun').addEventListener('click', async () => {
+    if (!pendingFile) return;
+    const btn = document.getElementById('calcRun');
+    const depth = document.getElementById('calcDepth').checked;
+    const method = (document.querySelector('input[name="method"]:checked') || {}).value || 'grid';
+    btn.disabled = true;
+    const big = pendingFile.size > 200 * 1048576;
+    try {
+      if (big) {
+        // большой файл — через очередь заданий: соединение не держится открытым
+        setProgress(0, 'Загружаю файл на сервер…');
+        const job = await upload(API + '/jobs?depth=' + depth + '&methods=' + method, pendingFile,
+            p => setProgress(p, `Загружаю файл на сервер… ${p.toFixed(0)}%`));
+        setProgress(0, 'Файл принят, задание в очереди…', true);
+        const started = Date.now();
+        for (;;) {
+          await new Promise(r => setTimeout(r, 3000));
+          const st = await api('/jobs/' + job.id);
+          const sec = ((Date.now() - started) / 1000).toFixed(0);
+          if (st.status === 'DONE') {
+            setProgress(100, `Готово за ${sec} с. Загружаю результат…`, false);
+            const res = await api('/jobs/' + job.id + '/result');
+            renderVariants(res);
+            document.getElementById('calcProgress').hidden = true;
+            document.getElementById('calcStatus').textContent =
+              `Расчёт выполнен за ${(st.compute_millis / 1000).toFixed(1)} с, вариантов: ${st.variants_count}.`;
+            break;
+          }
+          if (st.status === 'FAILED') throw new Error(st.error || 'расчёт не удался');
+          setProgress(0, `${st.status === 'RUNNING' ? 'Считаю' : 'Жду очереди'}… ${sec} с`, true);
+        }
+      } else {
+        setProgress(0, 'Загружаю файл на сервер…');
+        const res = await upload(API + '/process?depth=' + depth + '&methods=' + method
+            + '&variants=' + (window.__variants || 0),
+            pendingFile, p => setProgress(p, `Загружаю файл на сервер… ${p.toFixed(0)}%`));
+        setProgress(100, 'Расчёт выполнен, строю карту…', false);
+        renderVariants(res);
+        document.getElementById('calcProgress').hidden = true;
+        const ids = [...new Set(res.features.map(f => f.properties.variant_id))].filter(Boolean);
+        document.getElementById('calcStatus').textContent = `Расчёт выполнен, вариантов: ${ids.length}.`;
+      }
+    } catch (e) {
+      document.getElementById('calcProgress').hidden = true;
+      document.getElementById('calcStatus').textContent = 'Не удалось: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  bind('dropIn', 'fileIn', null, pickInput);
   bind('dropOut', 'fileOut', renderVariants);
 
   /** Образцы раздаёт сервис (/api/samples), поэтому без входа карта остаётся пустой. */

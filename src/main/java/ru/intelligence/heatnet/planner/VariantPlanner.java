@@ -39,14 +39,23 @@ public class VariantPlanner {
 
     public Outcome plan(InputModel model) { return plan(model, false, 0); }
 
-    public Outcome plan(InputModel model, boolean depthMode) { return plan(model, depthMode, 0); }
+    public Outcome plan(InputModel model, boolean depthMode) { return plan(model, depthMode, 0, null); }
+
+    public Outcome plan(InputModel model, boolean depthMode, int maxVariantsOverride) {
+        return plan(model, depthMode, maxVariantsOverride, null);
+    }
 
     /**
      * @param depthMode дополнительная задача: трассировка с учётом глубины
      * @param maxVariantsOverride сколько вариантов включить в выдачу; 0 — из правил (ТП §2.8: до трёх).
      *        Значения больше трёх используются для демонстрации и сравнения стратегий.
      */
-    public Outcome plan(InputModel model, boolean depthMode, int maxVariantsOverride) {
+    /**
+     * @param methods какие методы поиска считать: "grid" — только растровая сетка (быстро),
+     *        "visibility" — только граф видимости, "all" или null — оба. Пользователь выбирает
+     *        до запуска: граф видимости точнее по геометрии, но считается в разы дольше.
+     */
+    public Outcome plan(InputModel model, boolean depthMode, int maxVariantsOverride, String methods) {
         long t0 = System.currentTimeMillis();
         Diagnostics diag = model.diagnostics;
         ReferenceRules ref = rules.reference();
@@ -75,9 +84,14 @@ public class VariantPlanner {
         List<Variant> all = new ArrayList<>();
         int idx = 0;
         Variant first = null;
+        String want = methods == null || methods.isBlank() ? "grid" : methods.trim().toLowerCase();
         for (String name : rules.routing().strategies) {
             RoutePlanner.Strategy st = strategy(name, first, topo);
             if (st == null) continue;
+            // фильтр по выбранному методу поиска
+            boolean isVis = st.visibility;
+            if ("grid".equals(want) && isVis) continue;
+            if ("visibility".equals(want) && !isVis) continue;
             st.depthMode = depthMode;
             if (st.gridBearingDeg < 0) st.gridBearingDeg = gridBearing;
             idx++;
@@ -86,6 +100,9 @@ public class VariantPlanner {
             v.variantId = String.valueOf(idx);
             v.strategy = st.name;
             v.name = st.title != null ? st.title : st.name;
+            v.kind = st.kind;
+            v.kindTitle = "engineering".equals(st.kind) ? "Инженерный"
+                    : "shortest".equals(st.kind) ? "Минимальный по расчёту" : "Контрольный";
             v.description = st.description;
             NetworkBuilder nb = new NetworkBuilder();
             RoutePlanner planner = new RoutePlanner(rules, model, topo, field);
@@ -133,31 +150,40 @@ public class VariantPlanner {
         // ближе к практике проектирования — длинные прямые участки и повороты 90°. Остальные места
         // занимают лучшие по показателю S. Порядок (rank) назначается строго по S, как требует ТП §9.
         int max = maxVariantsOverride > 0 ? maxVariantsOverride : rules.routing().maxVariants;
+        // В выдаче должны быть представлены обе категории: инженерная трассировка (геометрия ближе
+        // к практике проектирования) и минимальная по расчёту (лучший показатель S). Заказчик видит
+        // цену «красивой» трассы и решает сам, а не получает выбор, сделанный за него.
         if (max > rules.routing().maxVariants)
             diag.info("VARIANTS_EXTENDED", "Запрошено вариантов: " + max + ". Техническое приложение (§2.8) допускает до "
                     + rules.routing().maxVariants + " содержательно разных вариантов — в конкурсную выдачу идут первые "
                     + rules.routing().maxVariants + " по рангу, остальные показаны для сравнения стратегий", null);
         List<Variant> selected = new ArrayList<>();
-        for (Variant v : distinct) {
-            if (selected.size() >= Math.min(max, rules.routing().orthogonalVariantsInOutput)) break;
-            if (v.strategy != null && v.strategy.startsWith("orthogonal") && v.unconnectedOksIds.isEmpty()) selected.add(v);
-        }
-        // квота на варианты по графу видимости: обычно они лучшие по показателю S
-        int visQuota = Math.min(max - selected.size(), rules.routing().visibilityVariantsInOutput);
-        if (visQuota > 0) {
+        // категорию берём по лучшему показателю внутри неё
+        java.util.function.BiConsumer<String, Integer> takeKind = (kind, quota) -> {
+            List<Variant> pool = new ArrayList<>();
+            for (Variant v : distinct) {
+                if (kind.equals(v.kind) && v.unconnectedOksIds.isEmpty() && !selected.contains(v)) pool.add(v);
+            }
+            pool.sort(Comparator.comparingDouble(v -> v.score));
+            int left = quota;
+            for (Variant v : pool) {
+                if (left-- <= 0 || selected.size() >= max) break;
+                selected.add(v);
+            }
+        };
+        // Состав выдачи: сначала лучший по расчёту, затем — если считали обоими методами — лучший
+        // от графа видимости, затем инженерный. Так заказчик видит и цифру, и два способа её получить.
+        takeKind.accept("shortest", 1);
+        if ("all".equals(want) || "visibility".equals(want)) {
             List<Variant> vis = new ArrayList<>();
-            for (Variant v : distinct) if (v.strategy != null && v.strategy.startsWith("visibility") && v.unconnectedOksIds.isEmpty()) vis.add(v);
+            for (Variant v : distinct) {
+                if ("visibility".equals(v.routingMethod) && v.unconnectedOksIds.isEmpty() && !selected.contains(v)) vis.add(v);
+            }
             vis.sort(Comparator.comparingDouble(v -> v.score));
-            for (Variant v : vis) { if (visQuota-- <= 0) break; if (!selected.contains(v)) selected.add(v); }
+            if (!vis.isEmpty() && selected.size() < max) selected.add(vis.get(0));
         }
-        // квота на спрямлённые варианты: короче и дешевле, геометрия дальше от инженерной практики
-        int freeQuota = Math.min(max - selected.size(), rules.routing().freeAngleVariantsInOutput);
-        if (freeQuota > 0) {
-            List<Variant> free = new ArrayList<>();
-            for (Variant v : distinct) if (v.strategy != null && v.strategy.startsWith("free_angle") && v.unconnectedOksIds.isEmpty()) free.add(v);
-            free.sort(Comparator.comparingDouble(v -> v.score));
-            for (Variant v : free) { if (freeQuota-- <= 0) break; if (!selected.contains(v)) selected.add(v); }
-        }
+        takeKind.accept("engineering", Math.max(1, rules.routing().engineeringVariantsInOutput));
+        takeKind.accept("shortest", Math.max(1, rules.routing().shortestVariantsInOutput));
         List<Variant> rest = new ArrayList<>(distinct);
         rest.removeAll(selected);
         rest.sort(Comparator.comparingDouble(v -> v.score));
@@ -198,6 +224,7 @@ public class VariantPlanner {
                 + " вариантов, поиск по графу видимости " + visMs + " мс на " + visCount
                 + " вариантов, инженерный расчёт " + engMs + " мс, всего " + out.millis + " мс", null);
         diag.stats.put("depth_mode", depthMode);
+        diag.stats.put("methods", want);
         return out;
     }
 
@@ -207,6 +234,7 @@ public class VariantPlanner {
         s.name = name;
         switch (name) {
             case "orthogonal_city": {
+                s.kind = "engineering";
                 s.title = "Инженерный: вдоль застройки, свои врезки";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
@@ -218,6 +246,7 @@ public class VariantPlanner {
                 break;
             }
             case "orthogonal_alt_tie_in": {
+                s.kind = "engineering";
                 s.title = "Инженерный: общий ствол, другие врезки";
                 if (first == null) return null;
                 s.attachToNewNetwork = true; s.order = "flow_desc";
@@ -236,6 +265,7 @@ public class VariantPlanner {
                 break;
             }
             case "orthogonal_shared": {
+                s.kind = "engineering";
                 s.title = "Инженерный: общая сеть, минимум врезок";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
@@ -246,6 +276,7 @@ public class VariantPlanner {
                 break;
             }
             case "free_angle_shared": {
+                s.kind = "shortest";
                 s.title = "Кратчайший: спрямление, общая сеть";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
@@ -257,6 +288,7 @@ public class VariantPlanner {
                 break;
             }
             case "free_angle_separate": {
+                s.kind = "shortest";
                 s.title = "Кратчайший: спрямление, свои врезки";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
@@ -269,6 +301,7 @@ public class VariantPlanner {
                 break;
             }
             case "visibility_shared": {
+                s.kind = "shortest";
                 s.title = "Граф видимости: общая сеть";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
@@ -282,6 +315,7 @@ public class VariantPlanner {
                 break;
             }
             case "visibility_separate": {
+                s.kind = "shortest";
                 s.title = "Граф видимости: свои врезки";
                 s.attachToNewNetwork = true; s.order = "distance";
                 s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;

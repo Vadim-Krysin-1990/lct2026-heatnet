@@ -69,6 +69,10 @@ public class Variant {
     public int rank;
     /** Метод поиска трассы: grid — растровая сетка, visibility — граф видимости. */
     public String routingMethod = "grid";
+    /** Категория варианта: engineering — инженерный, shortest — минимальный, control — контрольный. */
+    public String kind = "control";
+    /** Название категории для человека. */
+    public String kindTitle = "Контрольный";
     /** Время поиска трасс, мс (без инженерного расчёта). */
     public long routingMillis;
     /** Время инженерного расчёта: расходы, диаметры, узлы, стоимость, мс. */

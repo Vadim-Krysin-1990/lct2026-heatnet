@@ -52,11 +52,13 @@ public class JobController {
                     + "с продольным профилем у пересечений подземных коммуникаций")
             @RequestParam(name = "depth", defaultValue = "false") boolean depth,
             @Parameter(description = "Сколько вариантов вернуть; 0 — по правилам приложения, до трёх")
-            @RequestParam(name = "variants", defaultValue = "0") int variants) throws IOException {
+            @RequestParam(name = "variants", defaultValue = "0") int variants,
+            @Parameter(description = "Метод поиска: grid (быстро), visibility (точнее, дольше) или all")
+            @RequestParam(name = "methods", defaultValue = "grid") String methods) throws IOException {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Пустой файл");
         JobEntity j;
         try (InputStream in = file.getInputStream()) {
-            j = jobs.submit(in, file.getOriginalFilename(), Map.of("depth", depth, "variants", variants));
+            j = jobs.submit(in, file.getOriginalFilename(), Map.of("depth", depth, "variants", variants, "methods", methods));
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(toMap(j));
     }
