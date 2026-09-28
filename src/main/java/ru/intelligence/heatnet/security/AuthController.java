@@ -28,6 +28,9 @@ public class AuthController {
     @Value("${heatnet.security.enabled:false}")
     private boolean enabled;
 
+    @Value("${heatnet.security.mode:}")
+    private String mode;
+
     @Value("${heatnet.security.issuer-uri:}")
     private String issuer;
 
@@ -43,8 +46,12 @@ public class AuthController {
     @Operation(summary = "Настройки входа для клиента")
     @GetMapping(path = "/config", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> config() {
+        String resolved = mode != null && !mode.isBlank() ? mode.trim().toLowerCase() : (enabled ? "required" : "off");
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("enabled", enabled);
+        // enabled=true означает «вход возможен»: в режиме optional он доступен, но не обязателен
+        m.put("enabled", !"off".equals(resolved));
+        m.put("mode", resolved);
+        m.put("required", "required".equals(resolved));
         m.put("issuer", issuer);
         m.put("client_id", clientId);
         m.put("flow", "authorization_code+pkce");

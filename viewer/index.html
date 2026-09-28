@@ -91,6 +91,26 @@
     border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.4; }
   .hint b { display: block; margin-bottom: 3px; }
   .hint a { color: var(--link); }
+  .prof { margin-top: 12px; overflow-x: auto; }
+  .prof svg { display: block; min-width: 560px; }
+  .prof .surface { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+  .prof .pipe { fill: none; stroke: var(--net-new); stroke-width: 3; stroke-linejoin: round; }
+  .prof .normal { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
+  .prof .util { fill: var(--net-special); opacity: .85; }
+  .prof text { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .prof text.val { fill: var(--ink); }
+  .proflegend { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .proflegend i { display: inline-block; width: 18px; height: 3px; background: var(--net-new); vertical-align: middle; margin-right: 6px; }
+  .bench { display: grid; gap: 14px; margin-top: 16px; }
+  .bench .verdict { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 13px; }
+  .bench .verdict b { display: block; margin-bottom: 4px; }
+  table.grid td.ref { color: var(--muted); }
+  table.grid td.win { font-weight: 600; }
+  .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; }
+  .barbg { display: inline-block; width: 120px; height: 8px; border-radius: 4px; background: var(--line);
+    vertical-align: middle; margin-right: 6px; overflow: hidden; }
+  .barbg .bar { display: block; }
   .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
     padding: 14px 16px; background: var(--accent-soft); max-width: 620px; }
   .notice .muted { margin: 4px 0 10px; }
@@ -220,6 +240,8 @@
 <nav class="tabs" role="tablist">
   <button type="button" role="tab" data-page="map" aria-selected="true">Карта</button>
   <button type="button" role="tab" data-page="variants" aria-selected="false">Варианты</button>
+  <button type="button" role="tab" data-page="profile" aria-selected="false">Профиль по глубине</button>
+  <button type="button" role="tab" data-page="benchmark" aria-selected="false">Сравнение с эталоном</button>
   <button type="button" role="tab" data-page="log" aria-selected="false">Журнал событий</button>
   <button type="button" role="tab" data-page="rules" aria-selected="false">Правила расчёта</button>
   <button type="button" role="tab" data-page="about" aria-selected="false">О сервисе</button>
@@ -295,6 +317,32 @@
     <div class="muted">Сервис считает все стратегии и ранжирует по показателю S = 0,7·(C/25 млн) + 0,3·(L/100)
       (техприложение §6). В конкурсную выдачу идут первые три; остальные показаны для сравнения.</div>
     <div id="variantTable"></div>
+  </div>
+</section>
+
+<section class="page" id="page-profile">
+  <div class="page-inner">
+    <h1>Продольный профиль трассы</h1>
+    <div class="muted">Дополнительная задача: расчёт с учётом глубины. Трасса идёт на обычной отметке 3,0 м,
+      а у пересечений с подземными коммуникациями проходит выше или ниже — что дешевле — с полкой
+      постоянной глубины и уклоном не круче 0,10. Разрез строится по выбранной цепочке от точки
+      подключения до места присоединения.</div>
+    <div class="toolbar">
+      <select id="profChain"></select>
+      <span class="muted" id="profHint"></span>
+    </div>
+    <div id="profBox"></div>
+  </div>
+</section>
+
+<section class="page" id="page-benchmark">
+  <div class="page-inner">
+    <h1>Сравнение с эталоном</h1>
+    <div class="muted">Экспертиза первого этапа сравнивает горизонтальные проекции трассировок с эталонной
+      геометрией. Эталон здесь — существующая тепловая сеть из входного файла: она построена проектировщиками
+      и принята в эксплуатацию, поэтому её геометрия и есть образец «как делают на практике».
+      Метрики считаются на этой странице, по загруженным файлам.</div>
+    <div id="benchTable"></div>
   </div>
 </section>
 
@@ -379,6 +427,7 @@
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
     if (name === 'map' && window._hnMap) setTimeout(() => { layout(); }, 30);
     if (name === 'variants') renderVariantTable();
+    if (name === 'benchmark') renderBenchmark();
     if (name === 'log') loadLog();
     try { localStorage.setItem(NS + '.tab', name); } catch (e) { /* приватный режим */ }
   }
@@ -610,8 +659,9 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { pinned = null; inspectEl.hidden = true; } });
 
   // ---------- входные данные ----------
-  let inputBounds = null;
+  let inputBounds = null, inputFc = null;
   function renderInput(fc) {
+    inputFc = fc;
     ['oks', 'restr', 'net', 'chambers', 'points', 'source'].forEach(n => groups[n] && groups[n].clearLayers());
     const gOks = group('oks', 'здания (ОКС)'), gRestr = group('restr', 'прочие ограничения'), gNet = group('net', 'существующая сеть'),
           gCh = group('chambers', 'существующие камеры'), gPts = group('points', 'точки подключения'), gSrc = group('source', 'источник');
@@ -658,6 +708,7 @@
   let result = null, current = null;
   function renderVariants(fc) {
     result = fc;
+    if (document.getElementById('page-benchmark').classList.contains('active')) setTimeout(renderBenchmark, 0);
     if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
     const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].sort((a, b) => Number(a) - Number(b));
     const box = document.getElementById('variants'); box.innerHTML = '';
@@ -785,6 +836,133 @@
     <p class="muted">Показать вариант на карте — вкладка «Карта», кнопки слева.</p>`;
   }
 
+  // ---------- экран «Сравнение с эталоном» ----------
+  // Метрики геометрии считаются в проекции: длины и углы на широте Москвы иначе искажаются.
+  const R = 6378137, LAT0 = 55.7 * Math.PI / 180;
+  const toXY = ll => [ll[0] * Math.PI / 180 * R * Math.cos(LAT0), ll[1] * Math.PI / 180 * R];
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+  /** Геометрические метрики набора линий: длина, повороты, прямые участки, преобладающий азимут. */
+  function geometryStats(lines) {
+    let total = 0, turns = 0, right = 0, oblique = 0, other = 0;
+    const straights = [];
+    let sx = 0, sy = 0;
+    for (const coords of lines) {
+      const c = coords.map(toXY);
+      let run = 0;
+      for (let i = 0; i + 1 < c.length; i++) {
+        const d = dist(c[i], c[i + 1]);
+        total += d; run += d;
+        // азимут звена: круговое среднее по учетверённому углу — у ортогональной сетки
+        // направления b и b+90° равнозначны
+        const ang = Math.atan2(c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1]);
+        sx += d * Math.cos(4 * ang); sy += d * Math.sin(4 * ang);
+        if (i + 2 < c.length) {
+          const a1 = Math.atan2(c[i + 1][1] - c[i][1], c[i + 1][0] - c[i][0]);
+          const a2 = Math.atan2(c[i + 2][1] - c[i + 1][1], c[i + 2][0] - c[i + 1][0]);
+          let t = Math.abs(((a2 - a1) * 180 / Math.PI + 180) % 360 - 180);
+          if (t > 1) {
+            turns++;
+            if (t >= 85 && t <= 95) right++;
+            else if (t >= 40 && t <= 50) oblique++;
+            else other++;
+            straights.push(run); run = 0;
+          }
+        }
+      }
+      if (run > 0) straights.push(run);
+    }
+    straights.sort((a, b) => a - b);
+    const median = straights.length ? straights[Math.floor(straights.length / 2)] : 0;
+    let bearing = Math.atan2(sy, sx) / 4 * 180 / Math.PI;
+    bearing = ((bearing % 90) + 90) % 90;
+    return {
+      length: total, turns, turnsPerKm: total > 0 ? turns / (total / 1000) : 0,
+      right, oblique, other,
+      rightShare: turns ? right / turns : 0,
+      median, bearing, straightCount: straights.length
+    };
+  }
+
+  function linesOf(fc, filter) {
+    const out = [];
+    for (const f of fc.features) {
+      if (!f.geometry || f.geometry.type !== 'LineString') continue;
+      if (!filter(f.properties)) continue;
+      out.push(f.geometry.coordinates);
+    }
+    return out;
+  }
+
+  function renderBenchmark() {
+    const box = document.getElementById('benchTable');
+    if (!inputFc || !result) {
+      box.innerHTML = '<span class="muted">нужны оба файла: входной набор (эталон) и результат расчёта</span>';
+      return;
+    }
+    const ref = geometryStats(linesOf(inputFc, p => p.object_type === 'heat_network'));
+    const ids = [...new Set(result.features.map(f => f.properties.variant_id))]
+      .filter(Boolean).sort((a, b) => Number(a) - Number(b));
+    const rows = ids.map(id => {
+      const st = geometryStats(linesOf(result, p => p.object_type === 'heat_network' && p.variant_id === id));
+      const f = result.features.find(x => x.properties.object_type === 'variant_summary' && x.properties.variant_id === id);
+      const sum = f ? f.properties : {};
+      // отклонение от эталона: чем меньше, тем ближе геометрия к принятой практике.
+      // Азимут цикличен по 90°: направления 89° и 1° отличаются на 2°, а не на 88°.
+      let db = Math.abs(st.bearing - ref.bearing) % 90;
+      if (db > 45) db = 90 - db;
+      const dev = Math.abs(st.turnsPerKm - ref.turnsPerKm) / Math.max(1, ref.turnsPerKm)
+                + Math.abs(st.rightShare - ref.rightShare)
+                + db / 45;
+      return { id, st, sum, dev };
+    });
+    const best = rows.reduce((a, b) => (a && a.dev <= b.dev ? a : b), null);
+    const pct = x => (x * 100).toFixed(0) + '%';
+    const num = (x, d = 1) => Number(x).toLocaleString('ru-RU', { maximumFractionDigits: d });
+
+    box.innerHTML = `<div class="bench">
+      <div class="verdict">
+        <b>Ближе всего к эталону — ${best.sum.variant_name || ('вариант ' + best.id)}.</b>
+        Эталонная сеть: ${num(ref.turnsPerKm)} поворота на км, ${pct(ref.rightShare)} из них прямые,
+        медиана прямого участка ${num(ref.median)} м, преобладающее направление ${num(ref.bearing)}°.
+        У этого варианта — ${num(best.st.turnsPerKm)} поворота на км, ${pct(best.st.rightShare)} прямых,
+        медиана ${num(best.st.median)} м, направление ${num(best.st.bearing)}°.
+      </div>
+      <table class="grid">
+        <tr>
+          <th>Вариант</th><th class="num">Длина, м</th><th class="num">Поворотов</th>
+          <th class="num">на км</th><th class="num">Прямых углов</th><th class="num">Косых</th>
+          <th class="num">Медиана прямого, м</th><th class="num">Азимут</th><th class="num">S</th>
+        </tr>
+        <tr>
+          <td class="ref"><b>Эталон</b> — существующая сеть</td>
+          <td class="num ref">${num(ref.length, 0)}</td><td class="num ref">${ref.turns}</td>
+          <td class="num ref">${num(ref.turnsPerKm)}</td>
+          <td class="num ref">${ref.right} (${pct(ref.rightShare)})</td>
+          <td class="num ref">${ref.oblique}</td>
+          <td class="num ref">${num(ref.median)}</td><td class="num ref">${num(ref.bearing)}°</td><td class="num ref">—</td>
+        </tr>
+        ${rows.map(r => `<tr class="${r === best ? 'best' : ''}">
+          <td>${r.sum.variant_name || ('Вариант ' + r.id)}</td>
+          <td class="num">${num(r.sum.new_network_length, 0)}</td>
+          <td class="num">${r.st.turns}</td>
+          <td class="num ${Math.abs(r.st.turnsPerKm - ref.turnsPerKm) < 5 ? 'win' : ''}">${num(r.st.turnsPerKm)}</td>
+          <td class="num">${r.st.right} (${pct(r.st.rightShare)})</td>
+          <td class="num">${r.st.oblique}</td>
+          <td class="num">${num(r.st.median)}</td>
+          <td class="num">${num(r.st.bearing)}°</td>
+          <td class="num">${r.sum.score ?? '—'}</td>
+        </tr>`).join('')}
+      </table>
+      <div class="muted">Колонка «на км» — сколько изменений направления приходится на километр трассы:
+        у эталона это ${num(ref.turnsPerKm)}. «Прямых углов» — доля поворотов 85…95°: прямой угол работает
+        как самокомпенсация температурных удлинений, косой требует неподвижной опоры. «Азимут» —
+        преобладающее направление: совпадение с эталоном означает, что трасса идёт вдоль той же застройки.
+        Показатель S приведён рядом, чтобы было видно цену геометрии: самый похожий на эталон вариант
+        обычно не самый дешёвый, и выбор между ними — решение заказчика, а не алгоритма.</div>
+    </div>`;
+  }
+
   // ---------- экран «Журнал событий» ----------
   async function api(path, opts) {
     const o = Object.assign({ headers: {} }, opts || {});
@@ -825,7 +1003,7 @@
     if (t) params.set('type', t);
     if (l) params.set('level', l);
     if (a) params.set('actor', a);
-    if (oidc.enabled && !token) {
+    if (oidc.required && !token) {
       document.getElementById('logCount').textContent = '';
       box.innerHTML = accessNotice({ status: 401 }, 'Журнал событий');
       bindLoginButtons(box);
@@ -865,7 +1043,7 @@
   document.querySelectorAll('.rbtn').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.rbtn').forEach(x => x.classList.toggle('active', x === b));
     const box = document.getElementById('rulesBox');
-    if (oidc.enabled && !token) {
+    if (oidc.required && !token) {
       box.innerHTML = accessNotice({ status: 401 }, 'Просмотр правил расчёта');
       bindLoginButtons(box);
       return;
@@ -943,7 +1121,8 @@
     document.getElementById('whoName').textContent = u.username || 'анонимно';
     const roles = (u.roles || []).map(r => r.replace(/^ROLE_HEATNET-/, '').toLowerCase());
     document.getElementById('whoRole').textContent = u.authenticated
-      ? (roles.join(', ') || 'без ролей') : (oidc.enabled ? 'вход не выполнен' : 'вход не требуется');
+      ? (roles.join(', ') || 'без ролей')
+      : (oidc.required ? 'вход не выполнен' : (oidc.enabled ? 'вход не обязателен' : 'вход не требуется'));
     authBtn.hidden = !oidc.enabled;
     authBtn.textContent = u.authenticated ? 'Выйти' : 'Войти';
     authBtn.onclick = u.authenticated ? logout : login;
@@ -966,8 +1145,11 @@
       const code = new URLSearchParams(location.search).get('code');
       if (code) { try { await exchange(code); } catch (e) { console.warn(e); } }
       else { try { token = sessionStorage.getItem(NS + '.token'); } catch (e) { /* приватный режим */ } }
-      document.getElementById('aboutAuth').textContent =
-        'Единый вход включён: токены выдаёт Keycloak (' + oidc.issuer + '), роли администратора, инженера и наблюдателя.';
+      document.getElementById('aboutAuth').textContent = oidc.required
+        ? 'Единый вход обязателен: токены выдаёт Keycloak (' + oidc.issuer + '), роли администратора, инженера и наблюдателя.'
+        : 'Единый вход доступен, но не обязателен: стенд открыт для просмотра, а вход показывает работу ролей — '
+          + 'войдите как engineer или viewer и посмотрите разницу в правах и записи в журнале событий. '
+          + 'Токены выдаёт Keycloak (' + oidc.issuer + ').';
     }
     let me = { authenticated: false, username: 'анонимно', roles: [] };
     try {
@@ -976,7 +1158,7 @@
     showUser(me);
     // пока вход не выполнен, содержимое закрыто экраном входа
     const gate = document.getElementById('gate');
-    gate.hidden = !(oidc.enabled && !me.authenticated);
+    gate.hidden = !(oidc.required && !me.authenticated);
     await loadSamples();
     if (document.getElementById('page-log').classList.contains('active')) loadLog();
   })();
@@ -999,7 +1181,7 @@
 
   /** Образцы раздаёт сервис (/api/samples), поэтому без входа карта остаётся пустой. */
   async function loadSamples() {
-    if (oidc.enabled && !token) return;
+    if (oidc.required && !token) return;
     try {
       renderInput(await api('/samples/dataset'));
       renderVariants(await api('/samples/result'));

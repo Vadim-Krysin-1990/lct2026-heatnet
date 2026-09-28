@@ -37,6 +37,9 @@ heatnet:
     # Конкурсный контур поднимается без внешних систем: проверка токенов выключена.
     # Включается оверлеем deploy/docker-compose.keycloak.yml (HEATNET_SECURITY_ENABLED=true).
     enabled: ${HEATNET_SECURITY_ENABLED:false}
+    # off | optional | required. optional — вход доступен, но не обязателен: стенд открыт проверяющему,
+    # а единый вход и роли можно показать вживую
+    mode: ${HEATNET_SECURITY_MODE:}
     issuer-uri: ${HEATNET_OIDC_ISSUER:}
     # внутренний адрес ключей Keycloak в сети compose (issuer при этом остаётся внешним)
     jwk-set-uri: ${HEATNET_OIDC_JWKS:}

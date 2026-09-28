@@ -33,7 +33,9 @@ services:
 
   app:
     environment:
-      HEATNET_SECURITY_ENABLED: "true"
+      # optional: стенд остаётся открытым для проверяющего, вход и роли работают и видны в журнале.
+      # Для закрытого контура поставьте required.
+      HEATNET_SECURITY_MODE: ${HEATNET_SECURITY_MODE:-optional}
       HEATNET_OIDC_ISSUER: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}/realms/catp
       HEATNET_OIDC_CLIENT_ID: catp-web
       # ключи забираем по имени сервиса внутри compose: внешний адрес из контейнера может быть недоступен

@@ -39,6 +39,18 @@ public class SecurityConfig {
     @Value("${heatnet.security.enabled:false}")
     private boolean enabled;
 
+    /**
+     * Режим доступа:
+     *   off      — проверки нет, сервис полностью открыт (конкурсный контур, значение по умолчанию);
+     *   optional — вход доступен и роли видны в журнале, но доступ без токена не закрыт:
+     *              так демонстрационный стенд остаётся открытым для проверяющего, а единый вход
+     *              можно показать вживую;
+     *   required — без токена доступа нет, права проверяются по ролям.
+     * Оставлено и старое свойство enabled: true равнозначно required.
+     */
+    @Value("${heatnet.security.mode:}")
+    private String mode;
+
     @Value("${heatnet.security.cors-origins:*}")
     private String corsOrigins;
 
@@ -59,12 +71,20 @@ public class SecurityConfig {
                 .cors().configurationSource(corsSource()).and()
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
                 .headers().frameOptions().sameOrigin().and();
-        if (!enabled) {
-            log.info("Проверка токенов выключена (heatnet.security.enabled=false): открытый контур для конкурсной проверки");
+        String m = resolveMode();
+        if ("off".equals(m)) {
+            log.info("Режим доступа: off — открытый контур для конкурсной проверки, токены не проверяются");
             http.authorizeRequests().anyRequest().permitAll();
             return http.build();
         }
-        log.info("Проверка токенов включена: сервис принимает JWT Keycloak");
+        if ("optional".equals(m)) {
+            log.info("Режим доступа: optional — вход доступен, но не обязателен; переданный токен проверяется и попадает в журнал");
+            http.authorizeRequests().anyRequest().permitAll()
+                    .and()
+                    .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(converter())));
+            return http.build();
+        }
+        log.info("Режим доступа: required — без токена доступа нет, права проверяются по ролям");
         // открыта только оболочка страницы и сведения о том, куда идти за токеном:
         // данные, документация API и расчёт доступны после входа
         http.authorizeRequests()
@@ -104,6 +124,20 @@ public class SecurityConfig {
             return v != null && !v.isEmpty();
         }
     }
+
+    /** Режим из свойства mode; если оно пустое — из старого флага enabled. */
+    private String resolveMode() {
+        if (mode != null && !mode.isBlank()) {
+            String v = mode.trim().toLowerCase();
+            if (v.equals("off") || v.equals("optional") || v.equals("required")) return v;
+            log.warn("Неизвестный режим доступа «{}», используется off", mode);
+            return "off";
+        }
+        return enabled ? "required" : "off";
+    }
+
+    /** Доступен ли режим снаружи (для /api/auth/config). */
+    public String currentMode() { return resolveMode(); }
 
     private CorsConfigurationSource corsSource() {
         CorsConfiguration c = new CorsConfiguration();
