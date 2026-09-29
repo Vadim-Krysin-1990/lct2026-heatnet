@@ -81,6 +81,19 @@ class DepthTest {
         assertEquals(1.975, minDepth, 0.01);
         assertEquals(3.0, maxDepth, 0.01);
         assertTrue(v.techNodes.size() >= 4, "техузлы в вершинах профиля: " + v.techNodes.size());
+        // приложение к ТЗ, разд. 7, пп. 3–4: места пересечений со стороной прохождения и вертикальным расстоянием
+        assertFalse(v.depthCrossings.isEmpty(), "пересечения должны попасть в выход");
+        for (Variant.DepthCrossing c : v.depthCrossings) {
+            assertNotNull(c.utilityId); assertNotNull(c.utilityType); assertNotNull(c.geom);
+            assertTrue("above".equals(c.position) || "below".equals(c.position) || "conflict".equals(c.position), c.position);
+            assertTrue(c.requiredClearanceM > 0, "требуемое расстояние: " + c.requiredClearanceM);
+            if (!"conflict".equals(c.position)) {
+                assertTrue(c.verticalClearanceM >= c.requiredClearanceM - 0.01,
+                        "просвет " + c.verticalClearanceM + " < нормы " + c.requiredClearanceM + " (" + c.utilityType + " " + c.utilityId + ")");
+            }
+            System.out.printf("   пересечение %s %s: %s, просвет %.2f м (норма %.2f), глубина новой сети %.2f м, участок %s на %.1f м%n",
+                    c.utilityType, c.utilityId, c.position, c.verticalClearanceM, c.requiredClearanceM, c.newTopDepthM, c.segmentId, c.atM);
+        }
         assertTrue(v.segments.size() > f.segments.size());
         // сводка пересчитана
         double sum = 0; for (Variant.NewSegment s : v.segments) sum += s.cost;

@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lct2026.intelligence/heatnet/result.schema.json",
+  "title": "Результат расчёта трассировки тепловой сети (раздел 7 технического приложения от 21.09.2026)",
+  "description": "Выходной GeoJSON сервиса ЦАТ. Схема проверяет обязательный состав: типы объектов, их геометрию и обязательные атрибуты. Дополнительные свойства разрешены — раздел 7 их допускает, и сервис пишет пояснения к вариантам, время расчёта, влияние на существующую сеть и пересечения по глубине.",
+  "type": "object",
+  "required": ["type", "features"],
+  "properties": {
+    "type": { "const": "FeatureCollection" },
+    "name": { "type": "string" },
+    "crs": { "type": "object" },
+    "metadata": {
+      "type": "object",
+      "description": "Прослеживаемость: чем и из чего получен файл. В обязательный состав не входит.",
+      "properties": {
+        "service": { "type": "string" },
+        "service_version": { "type": "string" },
+        "appendix_revision": { "type": "string" },
+        "generated_at": { "type": "string" },
+        "input_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "input_features": { "type": "number" },
+        "compute_millis": { "type": "number" },
+        "depth_mode": { "type": "boolean" },
+        "routing_methods": { "type": "string" },
+        "crs_input": { "const": "EPSG:4326" },
+        "crs_calculation": { "const": "EPSG:32637" }
+      }
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feature" }
+    }
+  },
+  "$defs": {
+    "id": { "type": ["string", "number"] },
+    "point": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": { "const": "Point" },
+        "coordinates": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "lineString": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": { "const": "LineString" },
+        "coordinates": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": { "type": "number" }
+          }
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["type", "properties"],
+      "properties": {
+        "type": { "const": "Feature" },
+        "properties": {
+          "type": "object",
+          "required": ["id", "object_type"],
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "object_type": {
+              "enum": ["heat_network", "heat_chamber", "technical_node", "variant_summary"]
+            }
+          }
+        }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/newSegment" },
+        { "$ref": "#/$defs/newChamber" },
+        { "$ref": "#/$defs/technicalNode" },
+        { "$ref": "#/$defs/variantSummary" }
+      ]
+    },
+    "newSegment": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "heat_network" } }, "required": ["object_type"] } } },
+      "then": {
+        "required": ["geometry"],
+        "properties": {
+          "geometry": { "$ref": "#/$defs/lineString" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "variant_id", "start_node_id", "end_node_id", "diameter", "flow_tph", "length", "laying_method", "cost"],
+            "properties": {
+              "variant_id": { "$ref": "#/$defs/id" },
+              "start_node_id": { "$ref": "#/$defs/id" },
+              "end_node_id": { "$ref": "#/$defs/id" },
+              "diameter": { "type": "integer", "minimum": 25 },
+              "flow_tph": { "type": "number", "minimum": 0 },
+              "length": { "type": "number", "exclusiveMinimum": 0 },
+              "laying_method": { "enum": ["base", "special"] },
+              "special_type": { "type": ["string", "null"] },
+              "k_special": { "type": "number", "minimum": 1 },
+              "depth_start": { "type": ["number", "null"] },
+              "depth_end": { "type": ["number", "null"] },
+              "k_depth": { "type": "number", "minimum": 1 },
+              "cost": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "newChamber": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "heat_chamber" } }, "required": ["object_type"] } } },
+      "then": {
+        "required": ["geometry"],
+        "properties": {
+          "geometry": { "$ref": "#/$defs/point" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "variant_id", "diameter", "cost"],
+            "properties": {
+              "variant_id": { "$ref": "#/$defs/id" },
+              "diameter": { "type": "integer", "minimum": 25 },
+              "cost": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "technicalNode": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "technical_node" } }, "required": ["object_type"] } } },
+      "then": {
+        "required": ["geometry"],
+        "properties": {
+          "geometry": { "$ref": "#/$defs/point" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "variant_id"],
+            "properties": { "variant_id": { "$ref": "#/$defs/id" } }
+          }
+        }
+      }
+    },
+    "variantSummary": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "variant_summary" } }, "required": ["object_type"] } } },
+      "then": {
+        "properties": {
+          "geometry": { "type": "null" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "variant_id", "rank", "construction_cost", "chamber_construction_cost", "existing_chamber_tie_in_count", "existing_chamber_tie_in_cost", "unconnected_penalty", "calculated_cost", "new_network_length", "score", "unconnected_oks_ids"],
+            "properties": {
+              "variant_id": { "$ref": "#/$defs/id" },
+              "rank": { "type": "integer", "minimum": 1 },
+              "variant_name": { "type": "string" },
+              "variant_description": { "type": "string" },
+              "variant_kind": { "enum": ["engineering", "shortest", "control"] },
+              "variant_kind_title": { "type": "string" },
+              "routing_method": { "enum": ["grid", "visibility"] },
+              "routing_millis": { "type": "number", "minimum": 0 },
+              "engineering_millis": { "type": "number", "minimum": 0 },
+              "compute_millis": { "type": "number", "minimum": 0 },
+              "turns_per_km": { "type": "number", "minimum": 0 },
+              "median_straight_m": { "type": "number", "minimum": 0 },
+              "oblique_turns": { "type": "integer", "minimum": 0 },
+              "construction_cost": { "type": "number", "minimum": 0 },
+              "chamber_construction_cost": { "type": "number", "minimum": 0 },
+              "existing_chamber_tie_in_count": { "type": "integer", "minimum": 0 },
+              "existing_chamber_tie_in_cost": { "type": "number", "minimum": 0 },
+              "unconnected_penalty": { "type": "number", "minimum": 0 },
+              "calculated_cost": { "type": "number", "minimum": 0 },
+              "new_network_length": { "type": "number", "minimum": 0 },
+              "score": { "type": "number", "minimum": 0 },
+              "unconnected_oks_ids": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+              "notes": { "type": "array", "items": { "type": "string" } },
+              "existing_network_impact": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["segment_id", "current_diameter", "added_flow_tph", "total_flow_tph", "required_diameter", "needs_upsize"],
+                  "properties": {
+                    "segment_id": { "$ref": "#/$defs/id" },
+                    "current_diameter": { "type": "integer" },
+                    "current_flow_tph": { "type": "number", "minimum": 0 },
+                    "current_flow_known": { "type": "boolean" },
+                    "added_flow_tph": { "type": "number", "minimum": 0 },
+                    "total_flow_tph": { "type": "number", "minimum": 0 },
+                    "loaded_share": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "required_diameter": { "type": "integer" },
+                    "needs_upsize": { "type": "boolean" }
+                  }
+                }
+              },
+              "depth_crossings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["utility_id", "utility_type", "position", "required_clearance_m", "new_top_depth_m"],
+                  "properties": {
+                    "utility_id": { "$ref": "#/$defs/id" },
+                    "utility_type": { "type": "string" },
+                    "position": { "enum": ["above", "below", "conflict"] },
+                    "vertical_clearance_m": { "type": "number" },
+                    "required_clearance_m": { "type": "number", "minimum": 0 },
+                    "new_top_depth_m": { "type": "number", "minimum": 0 },
+                    "segment_id": { "type": "string" },
+                    "at_m": { "type": "number", "minimum": 0 },
+                    "lon": { "type": "number" },
+                    "lat": { "type": "number" },
+                    "note": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

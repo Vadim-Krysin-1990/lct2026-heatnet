@@ -7,3 +7,4 @@ target/
 .DS_Store
 /data/runs/
 /tmp/
+data/samples/test_10mb.geojson

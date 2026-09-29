@@ -61,6 +61,47 @@ public class Variant {
         public Point geom;
     }
 
+    /**
+     * Пересечение новой сети с существующей линейной коммуникацией в режиме глубины
+     * (приложение к ТЗ, разд. 7, пп. 3–4: место, прохождение сверху или снизу, вертикальное расстояние).
+     */
+    public static class DepthCrossing {
+        public String utilityId;
+        public String utilityType;
+        /** above | below | conflict */
+        public String position;
+        /** расчётное вертикальное расстояние между габаритами, м */
+        public double verticalClearanceM;
+        /** требуемое по правилам вертикальное расстояние, м */
+        public double requiredClearanceM;
+        /** глубина верха новой сети в месте пересечения, м */
+        public double newTopDepthM;
+        public String segmentId;
+        /** положение вдоль цепочки участков от её начала, м */
+        public double atM;
+        public Point geom;
+        public String note;
+    }
+
+    /**
+     * Влияние новых подключений на участок существующей сети (ТЗ 2.11, раздел 4 п. 6):
+     * добавленный расход, требуемый условный диаметр и признак нехватки текущего ДУ.
+     * Информационный расчёт: реконструкция не выполняется (Разъяснения п. 14).
+     */
+    public static class ExistingImpact {
+        public String segmentId;
+        public int currentDiameter;
+        public double currentFlowTph;
+        /** был ли текущий расход задан во входных данных */
+        public boolean flowKnown;
+        public double addedFlowTph;
+        public double totalFlowTph;
+        /** какая доля длины участка оказалась под добавленной нагрузкой (врезка внутри участка) */
+        public double loadedShare;
+        public int requiredDiameter;
+        public boolean needsUpsize;
+    }
+
     public String variantId;
     public String strategy;
     /** Короткое название варианта для подписи в выдаче и на карте. */
@@ -84,6 +125,18 @@ public class Variant {
     public final List<TechNode> techNodes = new ArrayList<>();
     public final List<String> unconnectedOksIds = new ArrayList<>();
     public final List<String> notes = new ArrayList<>();
+    /** Места пересечений с существующими коммуникациями, заполняется только в режиме глубины. */
+    public final List<DepthCrossing> depthCrossings = new ArrayList<>();
+    /** Участки существующей сети, на которые пришёлся расход новых подключений. */
+    public final List<ExistingImpact> existingImpact = new ArrayList<>();
+    /**
+     * Нарушения обязательных правил, найденные самопроверкой после сборки варианта: отступ меньше
+     * нормы, поворот круче 90°, пересечение новых участков вне узла. Варианты с нарушениями в выдачу
+     * не попадают, пока есть чистые альтернативы.
+     */
+    public int ruleViolations;
+    /** Чем именно вариант нарушает правила — для диагностики отбора. */
+    public final List<String> violationNotes = new ArrayList<>();
 
     // сводка (ТП §10.7)
     public double constructionCost;

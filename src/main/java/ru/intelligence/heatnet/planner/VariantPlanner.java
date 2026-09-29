@@ -120,6 +120,8 @@ public class VariantPlanner {
             hc.compute(nb, v, diag);
             v.engineeringMillis = System.currentTimeMillis() - tEng;
             if (depthMode) new ru.intelligence.heatnet.depth.DepthProfiler(ref, rules.restrictions(), model).apply(v, diag, hc);
+            // влияние на существующую сеть: добавленный расход к источнику и требуемые ДУ (ТЗ 2.11, разд. 4 п. 6)
+            new ru.intelligence.heatnet.hydraulics.ExistingLoadAnalyzer(ref).analyze(v, topo, diag);
             v.computeMillis = System.currentTimeMillis() - ts;
             int connected = res.size() - v.unconnectedOksIds.size();
             diag.info("TECH_FEASIBILITY", "Вариант " + v.variantId + ": техническая возможность подключения по технологическим коридорам (наличие трассы с соблюдением ограничений) подтверждена для " + connected + " из " + res.size() + " точек присоединения" + (v.unconnectedOksIds.isEmpty() ? "" : "; требуют ручной проработки: " + v.unconnectedOksIds), null);
@@ -141,6 +143,11 @@ public class VariantPlanner {
         List<Variant> distinct = new ArrayList<>();
         for (Variant v : all) {
             boolean dup = false;
+            // единственного представителя метода не отбрасываем: пользователь, выбравший оба метода,
+            // должен увидеть оба и их сравнение, даже если цифры близки
+            boolean onlyOfMethod = true;
+            for (Variant d : distinct) if (d.routingMethod.equals(v.routingMethod)) { onlyOfMethod = false; break; }
+            if (onlyOfMethod) { distinct.add(v); continue; }
             for (Variant d : distinct) if (similar(v, d)) { dup = true; break; }
             if (dup) { diag.info("VARIANT_DUPLICATE", "Вариант " + v.variantId + " (" + v.strategy + ") не отличается содержательно от уже включённого — отброшен", null); continue; }
             distinct.add(v);
@@ -158,13 +165,19 @@ public class VariantPlanner {
                     + rules.routing().maxVariants + " содержательно разных вариантов — в конкурсную выдачу идут первые "
                     + rules.routing().maxVariants + " по рангу, остальные показаны для сравнения стратегий", null);
         List<Variant> selected = new ArrayList<>();
+        // Вариант с нарушением обязательных правил (отступ, угол, пересечение вне узла) в выдачу
+        // не идёт, пока есть чистые: эксперты проверяют обязательные правила прежде всего.
+        // Сортировка внутри категории — сначала без нарушений, затем по показателю S.
+        Comparator<Variant> byCleanThenScore = Comparator
+                .comparingInt((Variant v) -> v.ruleViolations > 0 ? 1 : 0)
+                .thenComparingDouble(v -> v.score);
         // категорию берём по лучшему показателю внутри неё
         java.util.function.BiConsumer<String, Integer> takeKind = (kind, quota) -> {
             List<Variant> pool = new ArrayList<>();
             for (Variant v : distinct) {
                 if (kind.equals(v.kind) && v.unconnectedOksIds.isEmpty() && !selected.contains(v)) pool.add(v);
             }
-            pool.sort(Comparator.comparingDouble(v -> v.score));
+            pool.sort(byCleanThenScore);
             int left = quota;
             for (Variant v : pool) {
                 if (left-- <= 0 || selected.size() >= max) break;
@@ -179,14 +192,14 @@ public class VariantPlanner {
             for (Variant v : distinct) {
                 if ("visibility".equals(v.routingMethod) && v.unconnectedOksIds.isEmpty() && !selected.contains(v)) vis.add(v);
             }
-            vis.sort(Comparator.comparingDouble(v -> v.score));
+            vis.sort(byCleanThenScore);
             if (!vis.isEmpty() && selected.size() < max) selected.add(vis.get(0));
         }
         takeKind.accept("engineering", Math.max(1, rules.routing().engineeringVariantsInOutput));
         takeKind.accept("shortest", Math.max(1, rules.routing().shortestVariantsInOutput));
         List<Variant> rest = new ArrayList<>(distinct);
         rest.removeAll(selected);
-        rest.sort(Comparator.comparingDouble(v -> v.score));
+        rest.sort(byCleanThenScore);
         for (Variant v : rest) {
             if (selected.size() >= max) break;
             selected.add(v);
@@ -196,7 +209,20 @@ public class VariantPlanner {
                     + ", " + GeoUtil.round(v.turnsPerKm, 1) + " поворотов на км, косых изломов на трассе " + v.sharpTurns
                     + ") рассчитан как контрольный и в выдачу не включён: геометрия с косыми изломами уступает инженерным вариантам", null);
         }
-        selected.sort(Comparator.comparingDouble(v -> v.score));
+        for (Variant v : distinct) {
+            if (v.ruleViolations == 0 || v.unconnectedOksIds.size() > 0) continue;
+            String what = String.join("; ", v.violationNotes);
+            if (selected.contains(v)) {
+                diag.warn("VARIANT_WITH_VIOLATION", "Вариант " + v.variantId + " (" + v.strategy
+                        + ") включён в выдачу с нарушениями обязательных правил (" + what
+                        + "): вариантов без нарушений в этой категории не нашлось — участок требует ручной проработки", null);
+                v.notes.add("Требует ручной проработки: " + what);
+            } else {
+                diag.info("VARIANT_REJECTED", "Вариант " + v.variantId + " (" + v.strategy
+                        + ", S=" + GeoUtil.round(v.score, 3) + ") в выдачу не включён: " + what, null);
+            }
+        }
+        selected.sort(byCleanThenScore);
         Outcome out = new Outcome();
         out.topology = topo;
         int rank = 0;

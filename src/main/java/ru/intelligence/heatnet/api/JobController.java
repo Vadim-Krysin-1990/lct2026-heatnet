@@ -100,6 +100,25 @@ public class JobController {
                 .body(res);
     }
 
+    @Operation(summary = "Забрать входные объекты в области расчёта",
+            description = "Объекты загруженного файла, попавшие в область расчёта: источник, существующая сеть "
+                    + "и камеры, точки присоединения ОКС и пространственные ограничения. Нужны просмотрщику, "
+                    + "чтобы показать карту именно загруженных данных: сам файл (до 3 ГБ) в браузер не передать. "
+                    + "Объектов здесь обычно на несколько порядков меньше, чем в файле — сколько всего было, "
+                    + "написано в поле total_features.")
+    @GetMapping(value = "/{id}/input-area", produces = "application/geo+json")
+    public ResponseEntity<FileSystemResource> inputArea(@PathVariable String id) {
+        JobEntity j = find(id);
+        java.nio.file.Path p = jobs.inputAreaPath(id);
+        if (!JobEntity.Status.DONE.name().equals(j.getStatus()) || !java.nio.file.Files.isReadable(p)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Область расчёта ещё не сформирована, задание в состоянии " + j.getStatus());
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"input_area_" + id + ".geojson\"")
+                .contentType(MediaType.parseMediaType("application/geo+json"))
+                .body(new FileSystemResource(p));
+    }
+
     @Operation(summary = "Диагностика: что было не так с данными и как считалось",
             description = "Разбор входного файла и хода расчёта: пропущенные и восстановленные атрибуты, "
                     + "невалидная геометрия, какие объекты пропущены как лежащие вне области расчёта, "

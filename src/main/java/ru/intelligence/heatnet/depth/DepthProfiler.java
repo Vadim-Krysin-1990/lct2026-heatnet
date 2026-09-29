@@ -81,6 +81,7 @@ public class DepthProfiler {
     @SuppressWarnings("unchecked")
     public void apply(Variant v, Diagnostics diag, HydraulicsCalculator hydraulics) {
         double normal = rules.normalDepth();
+        v.depthCrossings.clear();
         double slope = ref.depth.maxSlope;
         double half = ref.depth.plateauHalfLengthM;
         // 1. цепочки: последовательности участков, связанных через технические узлы
@@ -136,11 +137,13 @@ public class DepthProfiler {
                 }
             }
             crossings.sort(Comparator.comparingDouble(a -> a[0]));
+            List<Object[]> decided = new ArrayList<>();   // [s, Utility, DepthRules.Crossing] для выхода
             for (double[] cr : crossings) {
                 Utility u = utilities.get((int) cr[1]);
                 DepthRules.Crossing d = rules.decide(u.type, u.dn, (int) cr[2], cr[3]);
                 crossingsTotal++;
                 if ("none".equals(d.position)) continue;
+                decided.add(new Object[]{cr[0], u, d});
                 if (d.position == null) {
                     conflicts++;
                     String note = "Пересечение " + u.type + " " + u.id + " на " + GeoUtil.round(cr[0], 1) + " м участка " + segmentAt(chain, segRange, cr[0]).id + ": " + d.reason + " — требуется ручная проработка";
@@ -183,6 +186,40 @@ public class DepthProfiler {
                 lastEnd = b1;
             }
             verts.add(new Vertex(total, normal));
+            // 3a. места пересечений в выход: сторона прохождения и вертикальное расстояние
+            // (приложение к ТЗ, разд. 7, пп. 3–4). Глубина берётся фактическая, по построенному профилю.
+            for (Object[] rec : decided) {
+                double s = (Double) rec[0];
+                Utility u = (Utility) rec[1];
+                DepthRules.Crossing d = (DepthRules.Crossing) rec[2];
+                Variant.NewSegment src = segmentAt(chain, segRange, s);
+                Variant.DepthCrossing dc = new Variant.DepthCrossing();
+                dc.utilityId = u.id;
+                dc.utilityType = u.type;
+                dc.segmentId = src.id;
+                dc.atM = GeoUtil.round(s, 1);
+                dc.geom = GeoUtil.point(lil.extractPoint(s));
+                dc.requiredClearanceM = GeoUtil.round(d.verticalClearance, 2);
+                double h = depthAt(verts, s);
+                dc.newTopDepthM = GeoUtil.round(h, 2);
+                if (d.position == null) {
+                    dc.position = "conflict";
+                    dc.note = d.reason;
+                } else {
+                    dc.position = d.position;
+                    double[] th = rules.utilityTopAndHeight(u.type, u.dn);
+                    double hNew = ref.spec(src.diameter).heightM;
+                    double clear = "above".equals(d.position) ? th[0] - (h + hNew) : h - (th[0] + th[1]);
+                    dc.verticalClearanceM = GeoUtil.round(clear, 2);
+                    if (clear < d.verticalClearance - 0.01) {
+                        dc.note = "фактическое вертикальное расстояние меньше требуемого — требуется ручная проработка";
+                        diag.warn("DEPTH_CLEARANCE", "Вариант " + v.variantId + ": пересечение " + u.type + " " + u.id
+                                + " на " + dc.atM + " м участка " + src.id + ": просвет " + dc.verticalClearanceM
+                                + " м при норме " + dc.requiredClearanceM + " м", u.id);
+                    }
+                }
+                v.depthCrossings.add(dc);
+            }
             // 4. точки деления: вершины профиля + границы исходных участков (спецзоны, смена ДУ)
             TreeSet<Double> cuts = new TreeSet<>();
             for (Vertex vt : verts) cuts.add(clamp(vt.s, 0, total));
@@ -207,9 +244,15 @@ public class DepthProfiler {
                 // ТП от 21.09.2026, §5: Z-координаты не требуются, вертикальное положение задаётся
                 // атрибутами depth_start/depth_end; длина для стоимости и предельной длины —
                 // по горизонтальной проекции в EPSG:32637
-                Coordinate[] plan = new Coordinate[sc.length];
-                for (int k = 0; k < sc.length; k++) plan[k] = new Coordinate(sc[k].x, sc[k].y);
-                ns.geom = GeoUtil.GF.createLineString(plan);
+                // деление линии по длине может продублировать вершину, если точка деления совпала с ней;
+                // нулевой отрезок не несёт геометрии, но даёт ложный резкий поворот в проверках
+                List<Coordinate> plan = new ArrayList<>(sc.length);
+                for (Coordinate c : sc) {
+                    Coordinate prev = plan.isEmpty() ? null : plan.get(plan.size() - 1);
+                    if (prev == null || prev.distance(c) > 0.01) plan.add(new Coordinate(c.x, c.y));
+                }
+                if (plan.size() < 2) plan.add(new Coordinate(sc[sc.length - 1].x, sc[sc.length - 1].y));
+                ns.geom = GeoUtil.line(plan);
                 ns.length = s1 - s0;
                 ns.cost = ns.length * ref.spec(ns.diameter).newCostPerM * ns.kSpecial * ns.kDepth;
                 // узлы
@@ -223,7 +266,7 @@ public class DepthProfiler {
                     else {
                         Variant.TechNode t = new Variant.TechNode();
                         t.id = "dnode_" + (++nodeCounter);
-                        t.geom = GeoUtil.point(plan[plan.length - 1]);
+                        t.geom = GeoUtil.point(plan.get(plan.size() - 1));
                         nodes.add(t);
                         endNode = t.id;
                     }

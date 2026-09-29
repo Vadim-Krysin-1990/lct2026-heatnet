@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lct2026.intelligence/heatnet/input.schema.json",
+  "title": "Входные данные расчёта трассировки (раздел 7.1 технического приложения от 21.09.2026)",
+  "description": "GeoJSON FeatureCollection в EPSG:4326. Схема проверяет обязательный состав: источник теплоснабжения, существующая сеть и камеры, точки присоединения перспективных ОКС и пространственные ограничения. Дополнительные свойства разрешены — сервис их сохраняет и показывает, но в расчёте не использует.",
+  "type": "object",
+  "required": ["type", "features"],
+  "properties": {
+    "type": { "const": "FeatureCollection" },
+    "name": { "type": "string" },
+    "crs": { "type": "object" },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feature" },
+      "contains": {
+        "properties": {
+          "properties": {
+            "properties": { "object_type": { "const": "oks_connection_point" } },
+            "required": ["object_type"]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": ["string", "number"] },
+    "coord": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "point": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": { "type": { "const": "Point" }, "coordinates": { "$ref": "#/$defs/coord" } }
+    },
+    "lineString": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": { "const": "LineString" },
+        "coordinates": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/coord" } }
+      }
+    },
+    "anyGeometry": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "MultiPoint", "GeometryCollection"] }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["type", "properties", "geometry"],
+      "properties": {
+        "type": { "const": "Feature" },
+        "geometry": { "$ref": "#/$defs/anyGeometry" },
+        "properties": {
+          "type": "object",
+          "required": ["id", "object_type"],
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "object_type": {
+              "enum": ["source", "heat_network", "heat_chamber", "oks_connection_point", "restriction"],
+              "description": "Тип объекта по разделу 7.1. Неизвестный тип сервис не отбрасывает молча: он попадает в диагностику, а ограничение обрабатывается консервативно — как запрет прохода."
+            }
+          }
+        }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/source" },
+        { "$ref": "#/$defs/heatNetwork" },
+        { "$ref": "#/$defs/heatChamber" },
+        { "$ref": "#/$defs/connectionPoint" },
+        { "$ref": "#/$defs/restriction" }
+      ]
+    },
+    "source": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "source" } }, "required": ["object_type"] } } },
+      "then": { "properties": { "geometry": { "$ref": "#/$defs/point" } } }
+    },
+    "heatNetwork": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "heat_network" } }, "required": ["object_type"] } } },
+      "then": {
+        "properties": {
+          "geometry": { "$ref": "#/$defs/lineString" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "diameter"],
+            "properties": {
+              "diameter": { "type": "integer", "minimum": 25, "description": "условный диаметр участка, мм" },
+              "flow_tph": { "type": ["number", "null"], "minimum": 0, "description": "текущий расчётный расход, т/ч; если не задан, принимается 0 с предупреждением в диагностике" },
+              "upstream_object_id": { "type": ["string", "number", "null"], "description": "сосед со стороны источника; при отсутствии направление восстанавливается по геометрии" }
+            }
+          }
+        }
+      }
+    },
+    "heatChamber": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "heat_chamber" } }, "required": ["object_type"] } } },
+      "then": {
+        "properties": {
+          "geometry": { "$ref": "#/$defs/point" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type"],
+            "properties": {
+              "diameter": { "type": ["integer", "null"], "description": "если не задан, восстанавливается по наибольшему примыкающему участку" },
+              "upstream_object_id": { "type": ["string", "number", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "connectionPoint": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "oks_connection_point" } }, "required": ["object_type"] } } },
+      "then": {
+        "properties": {
+          "geometry": { "$ref": "#/$defs/point" },
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "flow_tph"],
+            "properties": {
+              "flow_tph": { "type": "number", "exclusiveMinimum": 0, "description": "расчётный расход объекта, т/ч — без него точка не подключается" },
+              "heat_load": { "type": ["number", "null"], "description": "тепловая нагрузка, Гкал/ч — справочно" },
+              "oks_id": { "type": ["string", "number", "null"], "description": "ссылка на полигон своего здания, если он есть во входных данных" }
+            }
+          }
+        }
+      }
+    },
+    "restriction": {
+      "if": { "properties": { "properties": { "properties": { "object_type": { "const": "restriction" } }, "required": ["object_type"] } } },
+      "then": {
+        "properties": {
+          "properties": {
+            "type": "object",
+            "required": ["id", "object_type", "restriction_type"],
+            "properties": {
+              "restriction_type": {
+                "type": "string",
+                "description": "Вид ограничения по таблице 2: oks, oks_existing, oks_future, park, social_area, prohibited_site, water, road, tram_tracks, railway, gas_pipeline, power_cable, heat_network. Иной вид допускается: он обрабатывается правилом по умолчанию и попадает в диагностику.",
+                "examples": ["oks", "oks_future", "water", "railway", "road", "tram_tracks", "gas_pipeline", "power_cable", "park", "social_area", "prohibited_site"]
+              },
+              "diameter": { "type": ["integer", "null"], "description": "для линейных коммуникаций: влияет на габарит и вертикальные расстояния в режиме глубины" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

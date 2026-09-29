@@ -48,8 +48,12 @@
   .appbar .ttl { font-weight: 600; font-size: 15px; line-height: 1.2; }
   .appbar .sub { font-size: 11.5px; opacity: .85; }
   .appbar .spacer { margin-left: auto; }
-  .appbar .who { text-align: right; font-size: 12px; line-height: 1.25; }
+  .appbar .who { text-align: right; font-size: 12px; line-height: 1.25; cursor: pointer;
+    padding: 4px 8px; border-radius: 8px; }
+  .appbar .who:hover { background: rgba(255, 255, 255, .12); }
   .appbar .who .role { opacity: .8; font-size: 11px; }
+  .appbar #authBtn.signin { background: #fff; color: var(--accent); border-color: #fff; font-weight: 600; }
+  .appbar #authBtn:disabled { opacity: .55; cursor: not-allowed; }
   .appbar button { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.3);
     border-radius: 8px; padding: 6px 12px; font-size: 12.5px; }
   .appbar button:hover { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.5); }
@@ -76,6 +80,23 @@
   table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   table.grid tr.best td { background: var(--accent-soft); }
+  table.grid tr.warnrow td { background: rgba(214, 140, 0, 0.12); }
+  a.dl { display: inline-block; font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink); text-decoration: none; }
+  a.dl:hover { border-color: var(--accent); }
+  #mcpConf { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    font-size: 12px; overflow-x: auto; white-space: pre; }
+  ul.feat, ol.feat { margin: 6px 0 14px; padding-left: 22px; font-size: 13px; line-height: 1.55; }
+  .notice ul.feat { font-size: 12.5px; margin-bottom: 8px; }
+  ul.feat li, ol.feat li { margin-bottom: 4px; }
+  .arch { margin: 8px 0 10px; }
+  .arch-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .arch-box { flex: 1 1 180px; min-width: 150px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--paper); padding: 10px 12px; font-size: 12.5px; font-weight: 600; text-align: center; }
+  .arch-box span { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .arch-box.wide { flex: 2 1 320px; }
+  .arch-box.accent { border-color: var(--accent); }
+  .arch-arrow { text-align: center; color: var(--muted); font-size: 12px; margin: 6px 0; }
   .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); }
   .pill.INFO { color: #0b6b3a; border-color: #0b6b3a55; }
   .pill.WARNING { color: #8a5a00; border-color: #8a5a0055; }
@@ -290,8 +311,9 @@
     <button type="button" id="brandMos" aria-pressed="true">ДИТ</button>
     <button type="button" id="brandMoek" aria-pressed="false">МОЭК</button>
   </div>
-  <div class="who"><div class="name" id="whoName">анонимно</div><div class="role" id="whoRole">вход не требуется</div></div>
-  <button type="button" id="authBtn" hidden>Войти</button>
+  <div class="who" id="whoBox" role="button" tabindex="0" title="Войти в сервис">
+    <div class="name" id="whoName">анонимно</div><div class="role" id="whoRole">вход не требуется</div></div>
+  <button type="button" id="authBtn">Войти</button>
 </header>
 <nav class="tabs" role="tablist">
   <button type="button" role="tab" data-page="map" aria-selected="true">Карта</button>
@@ -301,6 +323,8 @@
   <button type="button" role="tab" data-page="benchmark" aria-selected="false">Сравнение с эталоном</button>
   <button type="button" role="tab" data-page="log" aria-selected="false">Журнал событий</button>
   <button type="button" role="tab" data-page="rules" aria-selected="false">Правила расчёта</button>
+  <button type="button" role="tab" data-page="guide" aria-selected="false">Руководство</button>
+  <button type="button" role="tab" data-page="mcp" aria-selected="false">ИИ-агент (MCP)</button>
   <button type="button" role="tab" data-page="about" aria-selected="false">О сервисе</button>
 </nav>
 <section class="page active" id="page-map">
@@ -340,11 +364,21 @@
       </div>
       <div class="progress" id="calcProgress" hidden><i></i></div>
       <div class="muted" id="calcStatus"></div>
+      <div class="row" id="calcDone" hidden style="margin-top:8px">
+        <button type="button" id="calcSave">Скачать результат (GeoJSON)</button>
+        <span class="muted" id="calcSaveHint"></span>
+      </div>
+      <div id="timeBox" style="margin-top:10px"></div>
     </div>
     <details style="margin-top:10px">
       <summary class="muted" style="cursor:pointer">Показать готовый результат из файла</summary>
       <div class="drop" id="dropOut" style="margin-top:8px">Файл результата, полученный ранее
         <input type="file" id="fileOut" accept=".geojson,.json"></div>
+      <div class="row">
+        <button type="button" id="outShow" disabled>Показать на карте</button>
+        <button type="button" id="outReset">Вернуть образец</button>
+      </div>
+      <div class="muted" id="outStatus" style="margin-top:6px">файл не выбран</div>
     </details>
     <div class="row">
       <label class="chk"><input type="checkbox" id="osm"> подложка OpenStreetMap (нужен интернет)</label>
@@ -431,6 +465,7 @@
       <span class="muted" id="profHint"></span>
     </div>
     <div id="profBox"></div>
+    <div id="profCross" style="margin-top:18px"></div>
   </div>
 </section>
 
@@ -441,7 +476,8 @@
       геометрией. Эталон здесь — существующая тепловая сеть из входного файла: она построена проектировщиками
       и принята в эксплуатацию, поэтому её геометрия и есть образец «как делают на практике».
       Метрики считаются на этой странице, по загруженным файлам.</div>
-    <div id="benchTable"></div>
+    <div id="methodsTable"></div>
+    <div id="benchTable" style="margin-top:22px"></div>
   </div>
 </section>
 
@@ -470,12 +506,264 @@
     <div class="muted">Нормативная часть вынесена в YAML и читается сервисом на лету: справочник диаметров и
       стоимости (таблица 1 ТП), отступы и коэффициенты по видам ограничений (таблица 2), параметры трассировки.
       Эксперт правит правила без программиста, сервис перечитывает их по <code>POST /api/rules/reload</code>.</div>
+
+    <div class="notice" style="margin-top:12px"><b>На чём основаны числа.</b>
+      Счётные правила берутся из технического приложения к задаче (редакция от 21.09.2026) — по нему
+      считается результат, и оно главнее при любом расхождении. Там, где приложение молчит, решение
+      опирается на отраслевые нормы, и у каждого такого правила в YAML заполнено поле <code>source</code>:
+      <ul class="feat" style="margin-top:6px">
+        <li><b>СП 124.13330.2012</b> «Тепловые сети» — пересечение преград под прямым углом, при
+          обосновании не менее 45°, для железных дорог и метрополитена не менее 60° (п. 9.11);
+          самокомпенсация температурных удлинений на поворотах 90–130° — отсюда штраф за косой излом
+          в инженерных вариантах;</li>
+        <li><b>СП 227.1326000.2014</b> «Пересечения железнодорожных линий с линиями транспорта и
+          инженерными сетями» — основание для варианта прохода под железной дорогой, если заказчик его
+          разрешит;</li>
+        <li><b>СП 74.13330.2023</b> «Тепловые сети. Производство работ» — работы на пересечении
+          железнодорожных и трамвайных путей, сплошной контроль сварных соединений: учтено как
+          удорожание специального прохода;</li>
+        <li><b>СП 315.1325800.2017</b> «Тепловые сети бесканальной прокладки» — под железной дорогой
+          бесканальная прокладка не допускается, только канал, футляр или тоннель;</li>
+        <li><b>СП 42.13330</b> и <b>СП 31.13330</b> — расстояния до инженерных сетей и глубина заложения
+          ниже промерзания: основа профиля правил для другого ресурса (водопровод);</li>
+        <li><b>ПП РФ № 2115 и № 955, регламент подключения МОЭК</b> — термины процесса: техническая
+          возможность подключения, место присоединения, радиус эффективного теплоснабжения.</li>
+      </ul>
+      <b>Одно расхождение названо прямо:</b> таблица 2 приложения относит железную дорогу к запретам
+      с отступом 1,0 м, тогда как СП 124.13330 пересечение допускает — надземно либо в канале, футляре
+      или тоннеле под углом не менее 60°. Считаем по приложению, но правило вынесено в конфигурацию:
+      замена <code>rule: forbidden</code> на <code>special</code> включает пересечение без правки кода.
+      Подробнее — <code>docs/limits.md</code>.</div>
     <div class="toolbar">
       <button type="button" class="rbtn" data-rules="reference">Справочник расчёта</button>
       <button type="button" class="rbtn" data-rules="restrictions">Ограничения</button>
       <button type="button" class="rbtn" data-rules="routing">Параметры трассировки</button>
     </div>
     <div id="rulesBox"><span class="muted">выберите раздел</span></div>
+  </div>
+</section>
+
+<section class="page" id="page-guide">
+  <div class="page-inner">
+    <h1>Руководство пользователя</h1>
+    <div class="muted">Что нажать, что появится на экране и как читать результат. Открывать стенд можно
+      без входа — тогда доступны образцы и расчёт; вход через Keycloak нужен для журнала событий
+      и правки правил.</div>
+
+    <div class="est" style="margin-top:14px">
+      <div>
+        <h2>Шаг 1. Загрузить данные и выбрать метод</h2>
+        <table class="grid">
+          <tr><td style="width:34%"><b>Вкладка «Карта», блок слева</b></td>
+              <td>Перетащите входной GeoJSON в поле «Исходные данные» или нажмите на него и выберите файл.
+                Под полем появится имя файла и размер. Если файл больше 200 МБ, сервис сам поставит расчёт
+                в очередь — держать вкладку открытой не нужно, состояние показывается полосой.</td></tr>
+          <tr><td><b>Метод поиска</b></td>
+              <td>Три переключателя: «Растровая сетка» — поиск A\* по клеткам, развёрнутым на азимут
+                застройки; «Граф видимости» — вершины на углах запретных зон и прямые между ними;
+                «Оба метода» — считает и то и другое, чтобы сравнить. Выбор делается <b>до</b> запуска.</td></tr>
+          <tr><td><b>С учётом глубины</b></td>
+              <td>Галочка включает дополнительную задачу: отдельный набор вариантов с профилем по глубине.
+                На конкурсном наборе пересекать нечего — для показа есть кнопка «Загрузить пример
+                с коммуникациями» на вкладке «Профиль по глубине».</td></tr>
+          <tr><td><b>Кнопка «Рассчитать на сервере»</b></td>
+              <td>Появляется полоса загрузки, затем строка «Расчёт выполнен, вариантов: 3». Рядом —
+                кнопка «Скачать результат (GeoJSON)» и таблица времени по этапам.</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Шаг 2. Прочитать варианты на карте</h2>
+        <table class="grid">
+          <tr><td style="width:34%"><b>Список вариантов слева</b></td>
+              <td>Варианты сгруппированы блоками: «Инженерные» — геометрия по практике проектирования,
+                «Минимальные по расчёту» — лучший показатель S, «Контрольные» — для сравнения подходов.
+                У каждого подписаны длина, стоимость и S; наведение показывает пояснение, чем он отличается.</td></tr>
+          <tr><td><b>Карта</b></td>
+              <td>Синим — новая сеть, толще линия у большего диаметра; оранжевым — специальные проходы;
+                ромбы — новые тепловые камеры; точки — технические узлы; красным — существующая сеть.
+                Наведение на участок показывает ДУ, длину и стоимость, клик закрепляет карточку.</td></tr>
+          <tr><td><b>Переключатели слоёв</b></td>
+              <td>Здания, прочие ограничения, существующая сеть и камеры, точки подключения, источник —
+                включаются и выключаются по отдельности. Подложка OpenStreetMap — по галочке, нужен интернет.</td></tr>
+          <tr><td><b>Сводка справа</b></td>
+              <td>Место в ранжировании, показатель S, стоимость по статьям, длина, число участков,
+                врезок, камер и узлов, перечень неподключённых точек.</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Шаг 3. Разобрать вариант по деталям</h2>
+        <table class="grid">
+          <tr><td style="width:34%"><b>Вкладка «Варианты»</b></td>
+              <td>Таблица всех вариантов рядом: длина, стоимость, S, число врезок и камер, время расчёта.
+                Здесь удобно объяснять ранжирование.</td></tr>
+          <tr><td><b>Вкладка «Смета»</b></td>
+              <td>Стоимость по статьям и по диаметрам, камеры и узлы, влияние на существующую сеть
+                (какие участки требуют увеличения ДУ). Кнопка «Паспорт варианта» открывает печатную
+                форму: ведомость участков и камер с описанием словами — труба, поворот, врезка, глубина.</td></tr>
+          <tr><td><b>Вкладка «Профиль по глубине»</b></td>
+              <td>Продольный разрез выбранной цепочки: поверхность, труба, спуски и полки, а ниже —
+                таблица пересечений с коммуникациями: сторона прохождения и вертикальное расстояние против нормы.</td></tr>
+          <tr><td><b>Вкладка «Сравнение»</b></td>
+              <td>Сверху — сравнение методов поиска между собой (геометрия, цена, время), ниже — сравнение
+                с эталоном: метрики нашей трассы против существующей сети из входного файла.</td></tr>
+          <tr><td><b>Вкладка «Правила»</b></td>
+              <td>Действующие справочник диаметров и стоимости (таблица 1), ограничения (таблица 2)
+                и параметры трассировки — ровно то, по чему считал сервис, с указанием источника числа.</td></tr>
+          <tr><td><b>Вкладка «Журнал»</b></td>
+              <td>Кто и когда запускал расчёт, какие файлы принимались, чем закончилось. Фильтры по типу,
+                уровню и пользователю.</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Что означают пометки</h2>
+        <table class="grid">
+          <tr><td style="width:34%"><b>«Требует ручной проработки»</b></td>
+              <td>Самопроверка нашла в варианте нарушение правил — например, поворот круче 90°, который
+                не удалось срезать по свободному месту. Такой вариант попадает в выдачу только если
+                вариантов без нарушений в его категории нет; координаты места есть в диагностике.</td></tr>
+          <tr><td><b>Неподключённые ОКС</b></td>
+              <td>Для точки не нашлось допустимого маршрута. В диагностике есть причина по каждой,
+                в стоимости — штраф по приложению. Намеренно точки не отбрасываются.</td></tr>
+          <tr><td><b>«Объектов в файле … , в области расчёта …»</b></td>
+              <td>Для больших файлов сервис считает по объектам вокруг зоны подключения: остальные
+                физически не могут повлиять на трассу. На карту выносится та же окрестность.</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Как проверить результат самостоятельно</h2>
+        <table class="grid">
+          <tr><td style="width:34%"><b>Скачать и открыть в QGIS</b></td>
+              <td>Кнопка «Скачать результат (GeoJSON)» — файл по разделу 7 технического приложения,
+                открывается в любом ГИС без конвертаций.</td></tr>
+          <tr><td><b>Независимая проверка</b></td>
+              <td><code>python3 tools/validate_result.py &lt;входной&gt; &lt;выходной&gt;</code> — сценарий читает
+                оба файла и проверяет правила: отступы по фактическим диаметрам, повороты, дерево сети,
+                формулы стоимости и S, вертикальные просветы. 23 проверки на вариант, в режиме глубины — 25.</td></tr>
+          <tr><td><b>Свои данные</b></td>
+              <td>Любой GeoJSON конкурсной структуры. В репозитории есть готовые наборы:
+                конкурсный, с подземными коммуникациями, проверочный на 10 МБ и набор другого района
+                Москвы с эталонной трассой.</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <h1 style="margin-top:26px">Как решение закрывает ТЗ</h1>
+    <div class="muted">Каждое требование — и где оно в работающем сервисе.</div>
+    <table class="grid" style="margin-top:10px">
+      <tr><th style="width:42%">Требование ТЗ</th><th>Где в решении</th></tr>
+      <tr><td>Приём одного GeoJSON конкурсной структуры, проверка данных</td>
+          <td><code>POST /api/process</code>, потоковый разбор, диагностика вместо падения</td></tr>
+      <tr><td>Обработка всех перспективных ОКС за один запуск</td>
+          <td>один запрос — все 17 точек конкурсного набора, ручная подготовка маршрутов не нужна</td></tr>
+      <tr><td>До трёх содержательно разных вариантов и ранжирование</td>
+          <td>категории «инженерный» и «минимальный по расчёту», показатель S по приложению; вкладка «Варианты»</td></tr>
+      <tr><td>Маршруты с учётом пространственных ограничений</td>
+          <td>поле препятствий по таблице 2, спецпроходы под углом не менее 45°; вкладка «Правила»</td></tr>
+      <tr><td>Выбор места присоединения и устройство камер</td>
+          <td>существующая камера или новая на участке, правило десяти метров, запас лучей камеры</td></tr>
+      <tr><td>Расходы, условные диаметры, предельная длина</td>
+          <td>расчёт по дереву сети и таблице 1; ведомость участков в паспорте варианта</td></tr>
+      <tr><td>Изменение расчётных расходов существующей сети и требуемые ДУ</td>
+          <td>блок «Влияние на существующую сеть» в смете и в паспорте, поле <code>existing_network_impact</code></td></tr>
+      <tr><td>Стоимость строительства и штрафы</td>
+          <td>вкладка «Смета»: статьи, диаметры, врезки, штрафы</td></tr>
+      <tr><td>Перечень ОКС без маршрута</td>
+          <td><code>unconnected_oks_ids</code> и причина по каждой точке в диагностике</td></tr>
+      <tr><td>Выходные данные по разделу 7</td>
+          <td>GeoJSON того же состава, что у синхронного метода; независимая проверка <code>tools/validate_result.py</code></td></tr>
+      <tr><td>Файл до 3 ГБ (раздел 3.2)</td>
+          <td>двухпроходное чтение с областью расчёта и очередь заданий: 1 487 256 объектов, 148 с</td></tr>
+      <tr><td>Стек: Java 11, Spring Boot 2.6.3, Maven, PostgreSQL, docker-compose 1.29.2</td>
+          <td>версии зафиксированы в <code>pom.xml</code> и <code>docker-compose.yml</code></td></tr>
+      <tr><td>Дополнительная задача: трассировка с учётом глубины</td>
+          <td>режим <code>depth=true</code>, вкладка «Профиль по глубине», перечень пересечений</td></tr>
+      <tr><td>Сопроводительная документация (раздел 5)</td>
+          <td><code>docs/algorithm.md</code>, <code>output.md</code>, <code>limits.md</code>, <code>depth.md</code>, README</td></tr>
+      <tr><td>Демонстрация по разделу 4</td>
+          <td>этот стенд: загрузка, расчёт, выгрузка, карта, ограничения, варианты, сравнение, журнал</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="page" id="page-mcp">
+  <div class="page-inner">
+    <h1>ИИ-агент работает с расчётами напрямую</h1>
+    <div class="muted">Сервис отдаёт свои расчёты не только человеку в браузере, но и языковой модели —
+      по протоколу MCP (Model Context Protocol). Агент сам загружает файл на расчёт, читает варианты,
+      сравнивает методы, поднимает смету и объясняет решение словами. Ставить ничего не нужно:
+      сервер написан на стандартной библиотеке Python и работает в закрытом контуре рядом с сервисом.</div>
+
+    <div class="est" style="margin-top:14px">
+      <div class="verdict"><b>Зачем это заказчику</b>
+        Специалист центра компетенций спрашивает на человеческом языке: «посчитай эту заявку, сравни
+        оба метода и скажи, где трасса идёт близко к норме». Агент сам вызывает нужные инструменты
+        сервиса и отвечает по фактическим данным расчёта, а не по общим словам. Это же позволяет
+        встроить расчёт в рабочий чат или в другого агента, не открывая интерфейс и не разбирая
+        GeoJSON руками.</div>
+
+      <div>
+        <h2>Что умеет агент через MCP</h2>
+        <table class="grid">
+          <tr><th>Инструмент</th><th>Что делает</th></tr>
+          <tr><td><code>service_info</code></td><td>проверить доступность сервиса, показать действующие параметры трассировки и образцы данных</td></tr>
+          <tr><td><code>calculate</code></td><td>посчитать входной GeoJSON: метод поиска, режим глубины, число вариантов; файл больше 200 МБ уходит в очередь</td></tr>
+          <tr><td><code>job_status</code></td><td>состояние задания из очереди и получение результата по завершении</td></tr>
+          <tr><td><code>get_variants</code></td><td>варианты: место, длина, стоимость, показатель S, метод, время, пометки о ручной проработке</td></tr>
+          <tr><td><code>compare_methods</code></td><td>сравнить растровую сетку и граф видимости: геометрия, цена, время поиска</td></tr>
+          <tr><td><code>get_segments</code></td><td>ведомость участков варианта: узлы, ДУ, длина, расход, способ прокладки, глубина, стоимость</td></tr>
+          <tr><td><code>get_estimate</code></td><td>смета варианта по статьям и по диаметрам</td></tr>
+          <tr><td><code>existing_network_impact</code></td><td>влияние подключений на существующую сеть: добавленный расход к источнику и требуемые ДУ</td></tr>
+          <tr><td><code>depth_crossings</code></td><td>пересечения с подземными коммуникациями: сторона прохождения и вертикальные расстояния</td></tr>
+          <tr><td><code>diagnostics</code></td><td>диагностика задания: что было не так с данными и как шёл расчёт</td></tr>
+          <tr><td><code>get_rules</code></td><td>действующие правила: справочник диаметров и стоимости, ограничения таблицы 2, параметры трассировки</td></tr>
+          <tr><td><code>events</code></td><td>журнал событий: кто и когда запускал расчёты, чем они закончились</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <h2>Как подключить</h2>
+        <div class="muted">Скачайте сервер и добавьте его в настройки своего MCP-клиента.
+          Нужен только Python 3.8 и сетевой доступ к этому сервису.</div>
+        <div class="row" style="margin:8px 0">
+          <a class="dl" href="catp_mcp_server.py" download>Скачать catp_mcp_server.py</a>
+          <span class="muted">6 КБ, без внешних зависимостей</span>
+        </div>
+        <pre id="mcpConf">{
+  "mcpServers": {
+    "catp-heatnet": {
+      "command": "python3",
+      "args": ["/путь/к/catp_mcp_server.py"],
+      "env": { "CATP_URL": "http://localhost:8080" }
+    }
+  }
+}</pre>
+        <div class="muted">Файл настроек: у Claude Desktop — <code>claude_desktop_config.json</code>,
+          у Claude Code — <code>claude mcp add</code> или <code>.mcp.json</code> в проекте. Если сервис
+          запущен с обязательной проверкой токенов, добавьте в <code>env</code> ещё
+          <code>"CATP_TOKEN": "&lt;токен&gt;"</code>. Проверить связь без клиента:
+          <code>echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 catp_mcp_server.py</code>.</div>
+      </div>
+
+      <div>
+        <h2>О чём можно спрашивать</h2>
+        <table class="grid">
+          <tr><td>«Посчитай файл заявки и покажи варианты»</td><td>агент вызовет <code>calculate</code> и <code>get_variants</code></td></tr>
+          <tr><td>«Чем граф видимости отличается от сетки на этих данных?»</td><td><code>compare_methods</code> с цифрами по геометрии и времени</td></tr>
+          <tr><td>«Какие участки существующей сети не выдержат нагрузку?»</td><td><code>existing_network_impact</code>: участки с нехваткой ДУ</td></tr>
+          <tr><td>«Собери смету лучшего варианта по диаметрам»</td><td><code>get_estimate</code></td></tr>
+          <tr><td>«Что сервис записал в диагностику по этому заданию?»</td><td><code>diagnostics</code> с фильтром по уровню</td></tr>
+        </table>
+      </div>
+
+      <div class="muted">Агент получает только результаты расчёта и правила — он не меняет данные
+        и не правит правила: в наборе инструментов нет ни одной операции записи, кроме постановки
+        расчёта в очередь. Все обращения проходят через тот же REST-интерфейс и попадают в журнал
+        событий, поэтому видно, что именно спрашивал агент.</div>
+    </div>
   </div>
 </section>
 
@@ -486,9 +774,87 @@
       существующей сети, точках присоединения новых объектов и городских ограничениях сам строит и
       сравнивает варианты подключения: где присоединиться, как пройти трассе, какие нужны диаметры,
       камеры и узлы и сколько это будет стоить. Инженеру остаётся проверить и выбрать, а не чертить.
-      Вход и выход — Вход и выход — GeoJSON структуры технического приложения (редакция от 21.09.2026),
+      Вход и выход — GeoJSON структуры технического приложения (редакция от 21.09.2026),
       расчёт в проекции EPSG:32637, выдача в WGS 84.</p>
-    <h2>Как считает</h2>
+    <h2>Возможности</h2>
+    <ul class="feat">
+      <li>расчёт всех перспективных ОКС района за один запуск, без ручной подготовки маршрутов;</li>
+      <li>до трёх содержательно разных вариантов — минимальный по расчёту и инженерный, каждый подписан словами;</li>
+      <li><b>два независимых метода поиска геометрии</b>: растровая сетка (A*) и граф видимости (Дейкстра),
+        с прямым сравнением результата и времени;</li>
+      <li>ограничения по таблице 2: запреты с отступами по фактическому диаметру и специальные проходы
+        под дорогами, трамвайными путями и железной дорогой с нормируемым углом;</li>
+      <li>выбор места присоединения — существующая камера или новая на участке сети, с правилом десяти
+        метров и запасом лучей камеры;</li>
+      <li>расходы по дереву сети, подбор условных диаметров, проверка предельной длины по каждому пути,
+        технические узлы в точках смены параметров;</li>
+      <li><b>влияние на существующую сеть</b>: добавленный расход по цепочке к источнику и требуемые
+        условные диаметры существующих участков;</li>
+      <li>смета по статьям и диаметрам, печатный паспорт варианта с ведомостью участков словами;</li>
+      <li><b>дополнительная задача целиком</b>: профиль по глубине, выбор прохода над или под
+        коммуникацией по стоимости, перечень пересечений с вертикальными расстояниями;</li>
+      <li>самопроверка результата: отступы, повороты круче 90°, пересечения вне узлов, вертикальные
+        просветы — нарушения идут в диагностику, а вариант с ними не выдаётся, пока есть чистая альтернатива;</li>
+      <li>потоковая обработка входного файла <b>до 3 ГБ</b> с отсечением объектов вне области расчёта;</li>
+      <li>частичный результат с диагностикой, если отдельную точку подключить нельзя;</li>
+      <li>правила и справочники в YAML — правятся без программиста и перечитываются на лету;</li>
+      <li>единый вход и роли через Keycloak, журнал событий со сквозным идентификатором запроса;</li>
+      <li><b>MCP-сервер</b>: те же расчёты доступны ИИ-агенту, 12 инструментов, без внешних зависимостей.</li>
+    </ul>
+
+    <h2>Как проходит расчёт</h2>
+    <ol class="feat">
+      <li>Входной GeoJSON разбирается потоком: геометрия и атрибуты проверяются, ошибки и допущения идут
+        в диагностику, а не роняют расчёт. Для больших файлов первым проходом определяется область
+        расчёта, и дальше читаются только объекты в ней.</li>
+      <li>Геометрия переводится из WGS 84 в EPSG:32637 — все метрические вычисления идут в метрах.</li>
+      <li>По существующей сети восстанавливается топология: ориентация участков к источнику, примыкания
+        к камерам, допустимые места присоединения.</li>
+      <li>Строится поле препятствий по таблице 2: запретные зоны с отступами и зоны специальных проходов
+        с осью и нормируемым углом.</li>
+      <li>Определяется преобладающий азимут застройки, и в повёрнутой системе ищется трасса от каждой
+        точки подключения — по растровой сетке или по графу видимости, с запретом поворотов круче 90°.</li>
+      <li>Трассы сводятся в общее дерево: близкие точки образуют общий ствол, дальние присоединяются
+        через камеры; выбирается место присоединения.</li>
+      <li>По дереву собираются расходы, подбираются диаметры, проверяется предельная длина по каждому
+        пути, ставятся камеры в точках ветвления и технические узлы в точках смены параметров.</li>
+      <li>Считается стоимость с коэффициентами специальных проходов и глубины, начисляются штрафы за
+        неподключённые точки, вычисляется показатель S и ранг варианта.</li>
+      <li>В режиме дополнительной задачи поверх этого строится профиль по глубине: пересечения,
+        выбор прохода сверху или снизу, спуск с уклоном не круче 0,10 и полка постоянной глубины.</li>
+      <li>Самопроверка проходит по готовому варианту и пишет в диагностику всё, что нарушает правила;
+        выдача формируется из вариантов без нарушений.</li>
+    </ol>
+
+    <h2>Архитектура</h2>
+    <div class="arch">
+      <div class="arch-row">
+        <div class="arch-box">Просмотрщик<span>Leaflet, без сборки</span></div>
+        <div class="arch-box">ИИ-агент<span>MCP-сервер</span></div>
+        <div class="arch-box">Keycloak<span>вход и роли</span></div>
+      </div>
+      <div class="arch-arrow">↓ HTTP, токен в заголовке</div>
+      <div class="arch-row">
+        <div class="arch-box wide">REST<span>Spring Boot 2.6.3, OpenAPI</span></div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-row">
+        <div class="arch-box">Очередь заданий<span>PostgreSQL</span></div>
+        <div class="arch-box accent">Расчётное ядро<span>JTS + proj4j</span></div>
+        <div class="arch-box">Журнал событий<span>PostgreSQL</span></div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-row">
+        <div class="arch-box">Правила в YAML<span>таблицы 1 и 2</span></div>
+        <div class="arch-box wide">Результат<span>GeoJSON по разделу 7 + диагностика</span></div>
+      </div>
+    </div>
+    <div class="muted">Расчётное ядро не знает о HTTP: тот же код вызывается из синхронного метода,
+      из очереди заданий и из тестов. Состояние заданий и результаты лежат в PostgreSQL, поэтому расчёт
+      файла на гигабайты можно поставить в очередь и забрать позже. Нормативная часть вынесена в YAML
+      и читается на лету — новая редакция СП меняет не код, а конфигурацию.</div>
+
+    <h2>Как считает трасса</h2>
     <p>Трасса ищется алгоритмом A* по растровому окну, развёрнутому вдоль преобладающего направления застройки:
       запрещённые зоны — буферы препятствий по таблице 2, специальные проходы (дороги, трамвай, газ, кабель)
       пересекаются под нормируемым углом. Повороты круче 90° запрещены. Затем расходы собираются по дереву,
@@ -497,6 +863,7 @@
     <table class="grid">
       <tr><td><code>POST /api/process</code></td><td>синхронный расчёт: файл → GeoJSON (параметры <code>depth</code>, <code>variants</code>)</td></tr>
       <tr><td><code>POST /api/jobs</code></td><td>очередь для файлов до 3 ГБ, результат — <code>GET /api/jobs/{id}/result</code></td></tr>
+      <tr><td><code>GET /api/jobs/{id}/input-area</code></td><td>входные объекты области расчёта: по ним просмотрщик строит карту загруженного файла</td></tr>
       <tr><td><code>GET /api/events</code></td><td>журнал событий</td></tr>
       <tr><td><code>GET /api/rules/*</code></td><td>действующие правила расчёта</td></tr>
       <tr><td><a href="/swagger-ui.html" target="_blank" rel="noopener">/swagger-ui.html</a></td><td>описание API</td></tr>
@@ -526,7 +893,7 @@
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
     if (name === 'map' && window._hnMap) setTimeout(() => { layout(); }, 30);
     if (name === 'variants') renderVariantTable();
-    if (name === 'benchmark') renderBenchmark();
+    if (name === 'benchmark') { renderMethods(); renderBenchmark(); }
     if (name === 'profile') renderProfile();
     if (name === 'estimate') renderEstimate();
     if (name === 'log') loadLog();
@@ -796,8 +1163,49 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { pinned = null; inspectEl.hidden = true; } });
 
   // ---------- входные данные ----------
-  let inputBounds = null, inputFc = null;
-  function renderInput(fc) {
+  let inputBounds = null, inputFc = null, inputDropped = 0;
+  /** Сколько входных объектов рисуем без прореживания: дальше карта в браузере начинает тормозить. */
+  const INPUT_DRAW_LIMIT = 2000;
+
+  /**
+   * Большой входной файл целиком на карту не выкладываем: оставляем то, что лежит вокруг расчётной
+   * зоны — остальное на трассу не влияет и только тормозит вкладку. Границы берём по точкам
+   * присоединения и существующей сети с запасом.
+   */
+  function trimInput(fc) {
+    if (!fc || !fc.features || fc.features.length <= INPUT_DRAW_LIMIT) return { fc, dropped: 0 };
+    const core = fc.features.filter(f => f.geometry && ['oks_connection_point', 'heat_network', 'heat_chamber', 'source']
+      .includes(f.properties.object_type));
+    if (!core.length) return { fc, dropped: 0 };
+    let minX = 180, minY = 90, maxX = -180, maxY = -90;
+    const walk = c => {
+      if (typeof c[0] === 'number') {
+        minX = Math.min(minX, c[0]); maxX = Math.max(maxX, c[0]);
+        minY = Math.min(minY, c[1]); maxY = Math.max(maxY, c[1]);
+      } else c.forEach(walk);
+    };
+    core.forEach(f => walk(f.geometry.coordinates));
+    const padY = 0.005, padX = padY / Math.max(0.2, Math.cos(minY * Math.PI / 180));   // примерно 550 м
+    minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+    const inside = f => {
+      let hit = false;
+      const test = c => {
+        if (hit) return;
+        if (typeof c[0] === 'number') {
+          if (c[0] >= minX && c[0] <= maxX && c[1] >= minY && c[1] <= maxY) hit = true;
+        } else c.forEach(test);
+      };
+      if (f.geometry) test(f.geometry.coordinates);
+      return hit;
+    };
+    const kept = fc.features.filter(inside);
+    return { fc: { type: 'FeatureCollection', features: kept }, dropped: fc.features.length - kept.length };
+  }
+
+  function renderInput(raw) {
+    const trimmed = trimInput(raw);
+    const fc = trimmed.fc;
+    inputDropped = trimmed.dropped;
     inputFc = fc;
     ['oks', 'restr', 'net', 'chambers', 'points', 'source'].forEach(n => groups[n] && groups[n].clearLayers());
     const gOks = group('oks', 'здания (ОКС)'), gRestr = group('restr', 'прочие ограничения'), gNet = group('net', 'существующая сеть'),
@@ -845,7 +1253,8 @@
   let result = null, current = null;
   function renderVariants(fc) {
     result = fc;
-    if (document.getElementById('page-benchmark').classList.contains('active')) setTimeout(renderBenchmark, 0);
+    if (document.getElementById('page-benchmark').classList.contains('active')) setTimeout(() => { renderMethods(); renderBenchmark(); }, 0);
+    setTimeout(renderTime, 0);
     document.getElementById('profChain').dataset.variant = '';
     document.getElementById('estVariant').dataset.filled = '';
     if (document.getElementById('page-variants').classList.contains('active')) setTimeout(renderVariantTable, 0);
@@ -1108,13 +1517,128 @@
         </table>
       </div>
 
+      ${impactBlock(s)}
+
       <div class="muted">Стоимость новой камеры включает присоединение к существующей сети, поэтому
         отдельной врезки при её строительстве нет. Врезка начисляется только за каждый новый участок,
         приходящий в уже существующую камеру. Суммы приведены без НДС, в ценах справочника
         технического приложения.</div>
     </div>`;
   }
+
+  /**
+   * Влияние новых подключений на существующую сеть: добавленный расход по цепочке к источнику
+   * и требуемый условный диаметр. Реконструкция в расчётной модели не выполняется, поэтому
+   * в стоимость варианта эти участки не входят.
+   */
+  function impactBlock(sum) {
+    const list = sum && sum.existing_network_impact;
+    if (!list || !list.length) return '';
+    const n = (x, d = 1) => Number(x).toLocaleString('ru-RU', { maximumFractionDigits: d });
+    const known = list.some(i => i.current_flow_known);
+    const upsize = list.filter(i => i.needs_upsize);
+    const rows = list.map(i => `<tr${i.needs_upsize ? ' class="warnrow"' : ''}>
+        <td>${i.segment_id}</td>
+        <td class="num">ДУ ${i.current_diameter}</td>
+        <td class="num">${n(i.current_flow_tph, 2)}</td>
+        <td class="num">+${n(i.added_flow_tph, 2)}</td>
+        <td class="num">${n(i.total_flow_tph, 2)}</td>
+        <td class="num">${i.loaded_share < 0.999 ? (i.loaded_share * 100).toFixed(0) + '%' : '100%'}</td>
+        <td class="num">ДУ ${i.required_diameter}</td>
+        <td>${i.needs_upsize ? 'текущего ДУ не хватает' : 'достаточно'}</td></tr>`).join('');
+    return `<div>
+      <h2>Влияние на существующую сеть</h2>
+      <div class="muted">Расход новых подключений распространён от каждой врезки по цепочке участков
+        к источнику. Участков затронуто: ${list.length}${upsize.length
+          ? `, требуют увеличения условного диаметра: ${upsize.length}` : ', увеличение диаметров не требуется'}.
+        ${known ? '' : 'Текущий расчётный расход существующих участков во входных данных не задан — принят нулевым, показан только добавляемый.'}</div>
+      <table class="grid">
+        <tr><th>Участок</th><th class="num">Текущий ДУ</th><th class="num">Текущий расход, т/ч</th>
+            <th class="num">Добавлено, т/ч</th><th class="num">Итого, т/ч</th><th class="num">Доля длины</th>
+            <th class="num">Требуемый ДУ</th><th>Вывод</th></tr>
+        ${rows}
+      </table>
+      <div class="muted">Реконструкция существующей сети и камер в расчётной модели не выполняется
+        (Разъяснения организаторов от 21.09.2026, п. 14), поэтому в стоимость варианта эти участки
+        не входят — расчёт информационный, для передачи в службу эксплуатации.</div>
+    </div>`;
+  }
   document.getElementById('estVariant').addEventListener('change', renderEstimate);
+
+  /**
+   * Сколько точек присоединения ОКС фактически подключено в варианте: узлы участков, совпадающие
+   * с точками подключения входных данных. Считается по данным, без привязки к конкурсному набору.
+   */
+  function connectedPoints(e) {
+    const ids = new Set((inputFc ? inputFc.features : [])
+      .filter(f => f.properties.object_type === 'oks_connection_point')
+      .map(f => String(f.properties.id)));
+    const used = new Set();
+    e.net.forEach(f => {
+      [f.properties.start_node_id, f.properties.end_node_id].forEach(nd => {
+        if (ids.size ? ids.has(String(nd)) : false) used.add(String(nd));
+      });
+    });
+    if (used.size) return used.size;
+    // входных данных на карте нет — показываем то, что известно из результата
+    const unconnected = (e.sum.unconnected_oks_ids || []).length;
+    return unconnected ? `нет данных (не подключено ${unconnected})` : 'нет данных';
+  }
+
+  /** Узел словами: точка подключения ОКС, тепловая камера, технический узел, существующая камера. */
+  function nodeWord(id) {
+    const sid = String(id);
+    const inPts = (inputFc ? inputFc.features : []).find(f => f.properties.object_type === 'oks_connection_point'
+      && String(f.properties.id) === sid);
+    if (inPts) return 'точка подключения ОКС ' + sid;
+    const inCh = (inputFc ? inputFc.features : []).find(f => f.properties.object_type === 'heat_chamber'
+      && String(f.properties.id) === sid);
+    if (inCh) return 'существующая тепловая камера ' + sid + ' (врезка)';
+    if (/(^|_)ch_/.test(sid)) return 'новая тепловая камера';
+    if (/node/.test(sid)) return 'технический узел';
+    if (/tie/.test(sid)) return 'место присоединения к существующей сети';
+    return 'узел ' + sid;
+  }
+
+  /** Повороты внутри участка: сколько и какой самый крутой (для наглядного описания). */
+  function turnsOf(f) {
+    if (!f.geometry || f.geometry.type !== 'LineString') return { n: 0, max: 0 };
+    const cs = f.geometry.coordinates;
+    const k = Math.cos((cs[0][1] || 55.75) * Math.PI / 180);
+    let n = 0, max = 0;
+    for (let i = 1; i + 1 < cs.length; i++) {
+      const ax = (cs[i][0] - cs[i - 1][0]) * k, ay = cs[i][1] - cs[i - 1][1];
+      const bx = (cs[i + 1][0] - cs[i][0]) * k, by = cs[i + 1][1] - cs[i][1];
+      const na = Math.hypot(ax, ay), nb = Math.hypot(bx, by);
+      if (na < 1e-12 || nb < 1e-12) continue;
+      const ang = Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (na * nb)))) * 180 / Math.PI;
+      if (ang > 3) { n++; max = Math.max(max, ang); }
+    }
+    return { n, max: Math.round(max) };
+  }
+
+  /** Участок словами: что это, откуда куда, с какими поворотами и на какой глубине. */
+  function segWords(f) {
+    const p = f.properties;
+    const t = turnsOf(f);
+    const parts = [];
+    parts.push(p.laying_method === 'special'
+      ? `специальный проход, труба ДУ${p.diameter}`
+      : `труба ДУ${p.diameter} в траншее`);
+    parts.push(`${fmt(p.length)} м`);
+    parts.push(`от ${nodeWord(p.start_node_id)} до ${nodeWord(p.end_node_id)}`);
+    if (t.n === 0) parts.push('прямая без поворотов');
+    else if (t.n === 1) parts.push(`один поворот ${t.max}°`);
+    else parts.push(`${t.n} поворота, самый крутой ${t.max}°`);
+    if (p.depth_start != null && p.depth_end != null) {
+      const a = Number(p.depth_start), b = Number(p.depth_end);
+      parts.push(Math.abs(a - b) < 0.01 ? `на глубине ${a.toFixed(2).replace('.', ',')} м`
+        : (a > b ? `подъём с ${a.toFixed(2).replace('.', ',')} до ${b.toFixed(2).replace('.', ',')} м`
+                 : `спуск с ${a.toFixed(2).replace('.', ',')} до ${b.toFixed(2).replace('.', ',')} м`));
+    }
+    const w = parts.join(', ');
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
 
   /** Паспорт варианта: ведомость для печати — то, что передают дальше в работу. */
   document.getElementById('estPrint').addEventListener('click', () => {
@@ -1131,10 +1655,13 @@
         <td class="n">${n(p.flow_tph)}</td>
         <td>${p.laying_method === 'special' ? 'спец. проход' : 'обычная'}</td>
         <td class="n">${p.depth_start != null ? n(p.depth_start, 2) + ' → ' + n(p.depth_end, 2) : '3,00'}</td>
-        <td class="n">${rub(p.cost)}</td></tr>`;
+        <td class="n">${rub(p.cost)}</td>
+        <td>${segWords(f)}</td></tr>`;
     }).join('');
     const chRows = e.ch.map((f, i) => `<tr><td>${i + 1}</td><td>${f.properties.id}</td>
-        <td class="n">ДУ ${f.properties.diameter}</td><td class="n">${rub(f.properties.cost)}</td></tr>`).join('');
+        <td class="n">ДУ ${f.properties.diameter}</td><td class="n">${rub(f.properties.cost)}</td>
+        <td>Новая тепловая камера ДУ ${f.properties.diameter}: разветвление сети либо присоединение
+          к существующей сети; цена включает присоединение</td></tr>`).join('');
     const w = window.open('', '_blank');
     if (!w) { alert('Браузер заблокировал окно паспорта. Разрешите всплывающие окна для этого адреса.'); return; }
     w.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8">
@@ -1166,7 +1693,7 @@
       <h2>Сводные показатели</h2>
       <table>
         <tr><td>Длина новой сети</td><td class="n">${n(s.new_network_length, 0)} м</td>
-            <td>Точек присоединения подключено</td><td class="n">${e.net.length ? (17 - ((s.unconnected_oks_ids || []).length)) : 0}</td></tr>
+            <td>Точек присоединения подключено</td><td class="n">${connectedPoints(e)}</td></tr>
         <tr><td>Участков сети</td><td class="n">${e.net.length}</td>
             <td>Новых тепловых камер</td><td class="n">${e.ch.length}</td></tr>
         <tr><td>Врезок в существующие камеры</td><td class="n">${s.existing_chamber_tie_in_count ?? 0}</td>
@@ -1181,18 +1708,33 @@
       <table>
         <thead><tr><th>№</th><th>Идентификатор</th><th>Узлы</th><th class="n">ДУ</th>
           <th class="n">Длина, м</th><th class="n">Расход, т/ч</th><th>Прокладка</th>
-          <th class="n">Глубина, м</th><th class="n">Стоимость</th></tr></thead>
+          <th class="n">Глубина, м</th><th class="n">Стоимость</th><th>Описание</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="4">Итого</td><td class="n">${n(s.new_network_length)}</td>
-          <td colspan="3"></td><td class="n">${rub(e.segCost)}</td></tr></tfoot>
+          <td colspan="3"></td><td class="n">${rub(e.segCost)}</td><td></td></tr></tfoot>
       </table>
 
       <h2>Ведомость тепловых камер</h2>
       <table>
-        <thead><tr><th>№</th><th>Идентификатор</th><th class="n">Диаметр</th><th class="n">Стоимость</th></tr></thead>
+        <thead><tr><th>№</th><th>Идентификатор</th><th class="n">Диаметр</th><th class="n">Стоимость</th>
+          <th>Описание</th></tr></thead>
         <tbody>${chRows}</tbody>
-        <tfoot><tr><td colspan="3">Итого</td><td class="n">${rub(e.chCost)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="3">Итого</td><td class="n">${rub(e.chCost)}</td><td></td></tr></tfoot>
       </table>
+
+      ${(s.existing_network_impact || []).length ? `
+      <h2>Влияние на существующую сеть</h2>
+      <table>
+        <thead><tr><th>Участок</th><th class="n">Текущий ДУ</th><th class="n">Добавлено, т/ч</th>
+          <th class="n">Итого, т/ч</th><th class="n">Требуемый ДУ</th><th>Вывод</th></tr></thead>
+        <tbody>${s.existing_network_impact.map(i => `<tr><td>${i.segment_id}</td>
+          <td class="n">${i.current_diameter}</td><td class="n">${n(i.added_flow_tph, 2)}</td>
+          <td class="n">${n(i.total_flow_tph, 2)}</td><td class="n">${i.required_diameter}</td>
+          <td>${i.needs_upsize ? 'текущего ДУ не хватает' : 'достаточно'}</td></tr>`).join('')}</tbody>
+      </table>
+      <div class="note">Расход новых подключений распространён от врезок по цепочке к источнику.
+        Реконструкция существующей сети и камер в расчётной модели не выполняется, поэтому в стоимость
+        варианта эти участки не входят; раздел предназначен для службы эксплуатации.</div>` : ''}
 
       <div class="note">Расчёт выполнен автоматически по правилам технического приложения
         (редакция от 21.09.2026): диаметры подобраны по расходу с проверкой предельной длины
@@ -1267,7 +1809,7 @@
     const box = document.getElementById('profBox');
     const sel = document.getElementById('profChain');
     const hint = document.getElementById('profHint');
-    if (!result || !current) { box.innerHTML = '<span class="muted">загрузите результат расчёта</span>'; return; }
+    if (!result || !current) { box.innerHTML = '<span class="muted">загрузите результат расчёта</span>'; document.getElementById('profCross').innerHTML = ''; return; }
     const chains = chainsOf(result, current)
       .map(c => ({ c, pts: profileData(c) }))
       .filter(x => x.pts.length > 1);
@@ -1279,6 +1821,7 @@
         Нажмите «Загрузить пример с коммуникациями» — в нём трасса пересекает два газопровода и
         силовой кабель, и профиль виден.</div></div>`;
       sel.innerHTML = ''; hint.textContent = '';
+      document.getElementById('profCross').innerHTML = '';
       return;
     }
     // цепочки с перепадом глубины интереснее — показываем их первыми
@@ -1295,6 +1838,146 @@
     drawProfile(box, chains[idx].pts);
     const withDepth = chains.filter(x => spread(x.pts) > 0.01).length;
     hint.textContent = `цепочек в варианте: ${chains.length}, с заглублением: ${withDepth}`;
+    renderCrossings();
+  }
+
+  /** Итоговое время расчёта с сервера (заголовок X-Compute-Millis или статус задания). */
+  let totalMillis = null;
+
+  const methodRu = { grid: 'Растровая сетка (A*)', visibility: 'Граф видимости (Дейкстра)' };
+
+  /** Сводки вариантов по методам: для разбора времени и сравнения методов между собой. */
+  function summaries() {
+    if (!result) return [];
+    return result.features.filter(f => f.properties.object_type === 'variant_summary')
+      .map(f => f.properties)
+      .sort((a, b) => (a.rank || 99) - (b.rank || 99));
+  }
+
+  /**
+   * Разбор времени: подготовка данных, поиск трассы по каждому методу, инженерный расчёт.
+   * Инженерный расчёт (расходы, диаметры, предельная длина, узлы, стоимость) вынесен отдельно —
+   * видно, что он занимает единицы миллисекунд, а время уходит на поиск геометрии.
+   */
+  function renderTime() {
+    const box = document.getElementById('timeBox');
+    if (!box) return;
+    const sums = summaries();
+    if (!sums.length) { box.innerHTML = ''; return; }
+    const byMethod = {};
+    let routing = 0, engineering = 0;
+    sums.forEach(p => {
+      const m = p.routing_method || 'grid';
+      const b = byMethod[m] = byMethod[m] || { n: 0, routing: 0, engineering: 0 };
+      b.n++; b.routing += Number(p.routing_millis || 0); b.engineering += Number(p.engineering_millis || 0);
+      routing += Number(p.routing_millis || 0);
+      engineering += Number(p.engineering_millis || 0);
+    });
+    const sec = ms => (ms / 1000).toFixed(ms < 1000 ? 3 : 1) + ' с';
+    const prep = totalMillis != null ? Math.max(0, totalMillis - routing - engineering) : null;
+    const rows = Object.keys(byMethod).map(m => {
+      const b = byMethod[m];
+      return `<tr><td>Поиск трассы — ${methodRu[m] || m}</td>
+        <td class="num">${b.n}</td><td class="num">${sec(b.routing)}</td></tr>`;
+    }).join('');
+    box.innerHTML = `<table class="grid">
+      <tr><th>Этап</th><th class="num">Вариантов</th><th class="num">Время</th></tr>
+      ${prep != null ? `<tr><td>Разбор файла, проверка данных, поле препятствий</td>
+        <td class="num">—</td><td class="num">${sec(prep)}</td></tr>` : ''}
+      ${rows}
+      <tr><td>Инженерный расчёт: расходы, диаметры, предельная длина, узлы, стоимость</td>
+        <td class="num">${sums.length}</td><td class="num">${sec(engineering)}</td></tr>
+      ${totalMillis != null ? `<tr class="totalrow"><td>Итого на сервере</td>
+        <td class="num">${sums.length}</td><td class="num">${sec(totalMillis)}</td></tr>` : ''}
+    </table>
+    <div class="muted" style="margin-top:6px">Время поиска указано суммарно по вариантам каждого метода;
+      по отдельному варианту оно есть в выходном файле (<code>routing_millis</code>,
+      <code>engineering_millis</code>) и в таблице «Сравнение методов».</div>`;
+  }
+
+  /** Сравнение методов трассировки между собой: что дал каждый и чего это стоило по времени. */
+  function renderMethods() {
+    const box = document.getElementById('methodsTable');
+    if (!box) return;
+    const sums = summaries();
+    if (!sums.length) { box.innerHTML = '<span class="muted">загрузите результат расчёта</span>'; return; }
+    const methods = [...new Set(sums.map(p => p.routing_method || 'grid'))];
+    const rows = sums.map(p => `<tr${p.rank === 1 ? ' class="best"' : ''}>
+        <td>${methodRu[p.routing_method] || p.routing_method || '—'}</td>
+        <td>${p.variant_kind_title || ''}<div class="muted">${p.variant_name || ''}</div></td>
+        <td class="num">${fmt(p.new_network_length)} м</td>
+        <td class="num">${rub(p.calculated_cost)}</td>
+        <td class="num">${p.score}</td>
+        <td class="num">${p.turns_per_km != null ? fmt(p.turns_per_km) : '—'}</td>
+        <td class="num">${p.median_straight_m != null ? fmt(p.median_straight_m) + ' м' : '—'}</td>
+        <td class="num">${p.oblique_turns != null ? p.oblique_turns : '—'}</td>
+        <td class="num">${((p.routing_millis || 0) / 1000).toFixed(1)} с</td>
+        <td class="num">${p.engineering_millis != null ? p.engineering_millis + ' мс' : '—'}</td></tr>`).join('');
+    let verdict = '';
+    if (methods.length > 1) {
+      const best = sums.reduce((a, b) => (a.score <= b.score ? a : b));
+      const fastest = sums.reduce((a, b) => ((a.routing_millis || 0) <= (b.routing_millis || 0) ? a : b));
+      const byM = {};
+      sums.forEach(p => {
+        const m = p.routing_method || 'grid';
+        if (!byM[m] || p.score < byM[m].score) byM[m] = p;
+      });
+      const pair = Object.keys(byM).map(m => `${methodRu[m] || m} — ${fmt(byM[m].new_network_length)} м, S=${byM[m].score}, поиск ${((byM[m].routing_millis || 0) / 1000).toFixed(1)} с`).join('; ');
+      verdict = `<div class="notice" style="margin-top:10px"><b>Что показало сравнение.</b>
+        ${pair}. Лучший показатель S дал метод «${methodRu[best.routing_method] || best.routing_method}»
+        (S=${best.score}), самый быстрый поиск — «${methodRu[fastest.routing_method] || fastest.routing_method}»
+        (${((fastest.routing_millis || 0) / 1000).toFixed(1)} с).
+        <div class="muted">Растровая сетка идёт по клеткам, развёрнутым на азимут застройки: даёт длинные
+        прямые и повороты 90°, но её шаг ограничивает спрямление. Граф видимости строит вершины на углах
+        буферов и соединяет их прямыми: трасса короче в открытом пространстве, но в плотной застройке
+        вершин становится много и поиск дольше. Оба метода считаются по одним и тем же правилам, поэтому
+        сравнимы напрямую.</div></div>`;
+    } else {
+      verdict = `<div class="muted" style="margin-top:8px">Расчёт выполнен одним методом.
+        Чтобы сравнить два, выберите «Оба метода» в блоке расчёта — тогда в этой таблице будут строки
+        обоих и вывод по их сопоставлению.</div>`;
+    }
+    box.innerHTML = `<h2>Сравнение методов трассировки</h2>
+      <div class="muted">Одни и те же данные, одни и те же правила, разные способы поиска геометрии.
+        Время поиска и инженерного расчёта показаны раздельно.</div>
+      <table class="grid">
+        <tr><th>Метод</th><th>Категория варианта</th><th class="num">Длина</th><th class="num">Стоимость</th>
+            <th class="num">S</th><th class="num">Поворотов на км</th><th class="num">Медиана прямой</th>
+            <th class="num">Косых изломов</th><th class="num">Поиск</th><th class="num">Инженерный расчёт</th></tr>
+        ${rows}
+      </table>${verdict}`;
+  }
+
+  /** Места пересечений с существующими коммуникациями: сторона прохождения и вертикальное расстояние. */
+  function renderCrossings() {
+    const box = document.getElementById('profCross');
+    if (!box) return;
+    const sum = result && result.features.find(f => f.properties.object_type === 'variant_summary'
+      && f.properties.variant_id === current);
+    const list = sum && sum.properties.depth_crossings;
+    if (!list || !list.length) { box.innerHTML = ''; return; }
+    const side = { above: 'сверху', below: 'снизу', conflict: 'конфликт' };
+    const rows = list.map(c => {
+      const bad = c.position === 'conflict' || c.note;
+      const clear = c.position === 'conflict' ? '—' : fmt(c.vertical_clearance_m) + ' м';
+      return `<tr${bad ? ' class="warnrow"' : ''}>
+        <td>${restrictionRu[c.utility_type] || c.utility_type} <span class="muted">${c.utility_id}</span></td>
+        <td>${side[c.position] || c.position}</td>
+        <td class="num">${clear}</td>
+        <td class="num">${fmt(c.required_clearance_m)} м</td>
+        <td class="num">${fmt(c.new_top_depth_m)} м</td>
+        <td>${c.segment_id} <span class="muted">на ${fmt(c.at_m)} м</span></td>
+        <td class="muted">${c.note || ''}</td></tr>`;
+    }).join('');
+    const conflicts = list.filter(c => c.position === 'conflict').length;
+    box.innerHTML = `<h2>Места пересечений с существующими коммуникациями</h2>
+      <div class="muted">Для каждого пересечения выбрана сторона прохождения — та, что дешевле, —
+        и проверено вертикальное расстояние между габаритами. Пересечений: ${list.length}${conflicts
+        ? ', из них требуют ручной проработки: ' + conflicts : ', все проходят по нормам'}.</div>
+      <table class="grid"><thead><tr><th>Коммуникация</th><th>Проход</th>
+        <th class="num">Вертикальное расстояние</th><th class="num">Норма</th>
+        <th class="num">Глубина новой сети</th><th>Участок</th><th>Примечание</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
   }
   const spread = pts => Math.max(...pts.map(p => p.d)) - Math.min(...pts.map(p => p.d));
   document.getElementById('profChain').addEventListener('change', renderProfile);
@@ -1611,6 +2294,55 @@
     : v === 'line' ? 'линия' : v === 'any' ? 'сверху или снизу' : v === 'below' ? 'только снизу'
     : v === 'above' ? 'только сверху' : v;
 
+  /**
+   * Ограничения по таблице 2 — одной читаемой таблицей: что это, можно ли пересечь, на каком
+   * расстоянии, под каким углом и во сколько раз дороже. Синонимы типов сведены в одну строку,
+   * подробности каждого правила остаются в исходном JSON ниже.
+   */
+  function restrictionsTable(d) {
+    const types = d.types || {};
+    const ruleRu = { forbidden: 'Запрет прохода', special: 'Специальный проход', allowed: 'Проход свободен' };
+    // синонимы (aliasOf) показываем строкой у основного типа, а не отдельными строками
+    const aliases = {};
+    Object.entries(types).forEach(([k, v]) => {
+      if (v.aliasOf) (aliases[v.aliasOf] = aliases[v.aliasOf] || []).push(k);
+    });
+    const rows = Object.entries(types)
+      .filter(([, v]) => !v.aliasOf)
+      .sort((a, b) => (a[1].rule === b[1].rule ? 0 : a[1].rule === 'forbidden' ? -1 : 1))
+      .map(([k, v]) => {
+        const name = restrictionRu[k] || v.title || k;
+        const syn = (aliases[k] || []).length ? `<div class="muted">синонимы: ${aliases[k].join(', ')}</div>` : '';
+        const clearance = (v.clearanceByDn || []).length
+          ? (v.clearanceByDn || []).map(c => `до ДУ${c.maxDn} — ${fmt(c.m)} м`).join('<br>')
+          : (v.clearanceM != null ? fmt(v.clearanceM) + ' м' : '—');
+        const depth = v.depth
+          ? `${v.depth.position === 'below' ? 'только снизу' : 'сверху или снизу'}, просвет ${fmt(v.depth.minVerticalClearanceM)} м`
+          : '—';
+        return `<tr${v.rule === 'special' ? ' class="warnrow"' : ''}>
+          <td><b>${name}</b><div class="muted">${k}</div>${syn}</td>
+          <td>${ruleRu[v.rule] || v.rule}</td>
+          <td class="num">${clearance}</td>
+          <td class="num">${v.minCrossingAngleDeg != null ? '≥ ' + fmt(v.minCrossingAngleDeg) + '°' : '—'}</td>
+          <td class="num">${v.kSpecial && v.kSpecial !== 1 ? '×' + v.kSpecial : '—'}</td>
+          <td>${depth}</td>
+          <td class="muted">${v.source || '—'}</td></tr>`;
+      }).join('');
+    return `<div>
+      <div class="muted" style="margin-bottom:6px">По умолчанию неизвестный тип считается
+        «${ruleRu[d.defaultRule] || d.defaultRule}» с отступом ${fmt(d.defaultClearanceM)} м —
+        новый вид ограничения не ломает расчёт, а обрабатывается консервативно и попадает в диагностику.
+        Отступ отсчитывается от внешней границы расчётного габарита новой сети, поэтому к нему
+        добавляется половина её ширины.</div>
+      <table class="grid">
+        <tr><th>Вид ограничения</th><th>Правило</th><th class="num">Минимальное расстояние</th>
+            <th class="num">Угол пересечения</th><th class="num">Коэффициент</th>
+            <th>В режиме глубины</th><th>Источник</th></tr>
+        ${rows}
+      </table>
+    </div>`;
+  }
+
   function rulesTable(obj, level) {
     if (obj === null || obj === undefined) return '<span class="muted">не задано</span>';
     if (Array.isArray(obj)) {
@@ -1649,7 +2381,7 @@
       const intro = rulesIntro[kind] || { title: '', text: '' };
       box.innerHTML = `<div class="est">
         <div class="verdict"><b>${intro.title}</b>${intro.text}</div>
-        ${rulesTable(d, 0)}
+        ${kind === 'restrictions' ? restrictionsTable(d) : rulesTable(d, 0)}
         <details><summary class="muted" style="cursor:pointer">Показать исходный JSON</summary>
           <pre style="white-space:pre-wrap;font-size:11.5px">${JSON.stringify(d, null, 2)
             .replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</pre></details>
@@ -1724,10 +2456,21 @@
     document.getElementById('whoRole').textContent = u.authenticated
       ? (roles.join(', ') || 'без ролей')
       : (oidc.required ? 'вход не выполнен' : (oidc.enabled ? 'вход не обязателен' : 'вход не требуется'));
-    authBtn.hidden = !oidc.enabled;
+    // кнопка остаётся на месте всегда: если вход выключен, видно почему, а не «кнопка пропала»
+    authBtn.hidden = false;
+    authBtn.disabled = !oidc.enabled;
+    authBtn.title = oidc.enabled
+      ? (u.authenticated ? 'Выйти из сервиса' : 'Войти через Keycloak')
+      : 'Единый вход на этом стенде выключен: сервис запущен в режиме без проверки токенов';
+    authBtn.classList.toggle('signin', oidc.enabled && !u.authenticated);
     authBtn.textContent = u.authenticated ? 'Выйти' : 'Войти';
     // при выключенном входе кнопка скрыта; иначе — экран выбора, чтобы уход на Keycloak был осознанным
     authBtn.onclick = u.authenticated ? logout : openGate;
+    // клик по «анонимно» в шапке делает то же самое — это первое, куда смотрят
+    const who = document.getElementById('whoBox');
+    who.title = authBtn.title;
+    who.onclick = () => { if (oidc.enabled) (u.authenticated ? logout() : openGate()); };
+    who.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); who.onclick(); } };
   }
   /** Экран выбора: войти через Keycloak или продолжить без входа. */
   function openGate() {
@@ -1847,6 +2590,9 @@
       xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total * 100); };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          // сервер сообщает итоговое время расчёта заголовком — из него считается время подготовки данных
+          const t = Number(xhr.getResponseHeader('X-Compute-Millis'));
+          totalMillis = Number.isFinite(t) && t > 0 ? t : null;
           try { resolve(JSON.parse(xhr.responseText)); }
           catch (e) { reject(new Error('сервер вернул не JSON')); }
         } else {
@@ -1862,6 +2608,55 @@
     });
   }
 
+  /** Последний расчёт: что скачивать и как назвать файл. */
+  let lastRun = null;
+
+  function showDownload(name, hint) {
+    const b = document.getElementById('lastBanner');
+    if (b) b.remove();
+    lastRun = { name };
+    document.getElementById('calcDone').hidden = false;
+    document.getElementById('calcSaveHint').textContent = hint || '';
+  }
+
+  document.getElementById('calcSave').addEventListener('click', () => {
+    if (!result) return;
+    const name = (lastRun && lastRun.name) || 'heatnet_result.geojson';
+    const blob = new Blob([JSON.stringify(result)], { type: 'application/geo+json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  });
+
+  /** Карта должна показывать объекты загруженного файла, а не образца. */
+  async function refreshInputFromJob(jobId) {
+    try {
+      const fc = await api('/jobs/' + jobId + '/input-area');
+      renderInput(fc);
+      return fc.total_features || null;
+    } catch (e) { return null; }
+  }
+
+  /** Для небольших файлов вход читаем прямо в браузере — сервер его не хранит. */
+  function refreshInputFromFile(file) {
+    if (file.size > 30 * 1048576) return Promise.resolve(false);
+    return new Promise(resolve => {
+      const fr = new FileReader();
+      fr.onload = () => {
+        try { renderInput(JSON.parse(fr.result)); resolve(true); }
+        catch (e) {
+          document.getElementById('calcStatus').textContent =
+            'Расчёт выполнен, но входные объекты на карту вывести не удалось: ' + e.message;
+          resolve(false);
+        }
+      };
+      fr.onerror = () => resolve(false);
+      fr.readAsText(file);
+    });
+  }
+
   document.getElementById('calcRun').addEventListener('click', async () => {
     if (!pendingFile) return;
     const btn = document.getElementById('calcRun');
@@ -1869,6 +2664,8 @@
     const method = (document.querySelector('input[name="method"]:checked') || {}).value || 'grid';
     btn.disabled = true;
     const big = pendingFile.size > 200 * 1048576;
+    document.getElementById('calcDone').hidden = true;
+    const baseName = pendingFile.name.replace(/\.(geo)?json$/i, '');
     try {
       if (big) {
         // большой файл — через очередь заданий: соединение не держится открытым
@@ -1884,10 +2681,17 @@
           if (st.status === 'DONE') {
             setProgress(100, `Готово за ${sec} с. Загружаю результат…`, false);
             const res = await api('/jobs/' + job.id + '/result');
+            totalMillis = Number(st.compute_millis) || null;
             renderVariants(res);
+            setProgress(100, 'Строю карту загруженных данных…', false);
+            const total = await refreshInputFromJob(job.id);
             document.getElementById('calcProgress').hidden = true;
+            const objects = inputFc ? inputFc.features.length : 0;
             document.getElementById('calcStatus').textContent =
-              `Расчёт выполнен за ${(st.compute_millis / 1000).toFixed(1)} с, вариантов: ${st.variants_count}.`;
+              `Расчёт выполнен за ${(st.compute_millis / 1000).toFixed(1)} с, вариантов: ${st.variants_count}.`
+              + (total ? ` Объектов в файле: ${fmt(total)}, в области расчёта: ${fmt(objects)} — остальные лежат вне зоны подключения и на трассу не влияют.` : '')
+              + (inputDropped ? ` На карту вынесены ${fmt(objects)} объектов вокруг трассы.` : '');
+            showDownload(baseName + '_result.geojson', 'файл того же состава отдаёт GET /api/jobs/' + job.id + '/result');
             break;
           }
           if (st.status === 'FAILED') throw new Error(st.error || 'расчёт не удался');
@@ -1900,9 +2704,13 @@
             pendingFile, p => setProgress(p, `Загружаю файл на сервер… ${p.toFixed(0)}%`));
         setProgress(100, 'Расчёт выполнен, строю карту…', false);
         renderVariants(res);
+        const shown = await refreshInputFromFile(pendingFile);
         document.getElementById('calcProgress').hidden = true;
         const ids = [...new Set(res.features.map(f => f.properties.variant_id))].filter(Boolean);
-        document.getElementById('calcStatus').textContent = `Расчёт выполнен, вариантов: ${ids.length}.`;
+        document.getElementById('calcStatus').textContent = `Расчёт выполнен, вариантов: ${ids.length}.`
+          + (shown ? (inputDropped ? ` На карте показаны объекты вокруг расчётной зоны: ${fmt(inputFc.features.length)}, вне зоны скрыто ${fmt(inputDropped)}.` : '')
+                   : ' Входные объекты на карте остались прежними: файл слишком велик, чтобы разобрать его в браузере.');
+        showDownload(baseName + '_result.geojson', '');
       }
     } catch (e) {
       document.getElementById('calcProgress').hidden = true;
@@ -1913,11 +2721,108 @@
   });
 
   bind('dropIn', 'fileIn', null, pickInput);
-  bind('dropOut', 'fileOut', renderVariants);
+
+  // Готовый результат из файла: выбор и показ разделены, чтобы было видно, что именно открывается,
+  // и чтобы отрисовка не выглядела как «ничего не произошло», когда файл совпал с образцом.
+  let pendingOut = null;
+  bind('dropOut', 'fileOut', null, f => {
+    pendingOut = f;
+    document.getElementById('outShow').disabled = false;
+    document.getElementById('outStatus').textContent = `выбран ${f.name}, ${mb(f.size)} — нажмите «Показать на карте»`;
+  });
+
+  document.getElementById('outShow').addEventListener('click', () => {
+    if (!pendingOut) return;
+    const name = pendingOut.name;
+    document.getElementById('outStatus').textContent = 'читаю файл…';
+    readFile(pendingOut, fc => {
+      const ids = [...new Set(fc.features.map(f => f.properties.variant_id))].filter(Boolean);
+      if (!ids.length) {
+        document.getElementById('outStatus').textContent =
+          `в файле ${name} нет вариантов расчёта: нужен выходной файл сервиса, а не входные данные`;
+        return;
+      }
+      totalMillis = null;
+      renderVariants(fc);
+      fitToResult();
+      const best = fc.features.find(f => f.properties.object_type === 'variant_summary');
+      const b = best ? best.properties : {};
+      document.getElementById('outStatus').textContent =
+        `показан ${name}: вариантов ${ids.length}` + (b.new_network_length != null
+          ? `, лучший — ${fmt(b.new_network_length)} м, ${rub(b.calculated_cost)}, S=${b.score}` : '');
+      showDownload(name, 'открыт из файла');
+    });
+  });
+
+  document.getElementById('outReset').addEventListener('click', async () => {
+    document.getElementById('outStatus').textContent = 'возвращаю образец…';
+    await loadSamples();
+    document.getElementById('outStatus').textContent = 'показан образец конкурсного набора';
+  });
+
+  /** Карта переезжает на геометрию результата: загруженный файл может быть из другого района. */
+  function fitToResult() {
+    if (!result) return;
+    const g = L.geoJSON({ type: 'FeatureCollection', features: result.features.filter(f => f.geometry) });
+    const b = g.getBounds();
+    if (b.isValid()) map.fitBounds(b.pad(0.08));
+  }
 
   /** Образцы раздаёт сервис (/api/samples), поэтому без входа карта остаётся пустой. */
+  /**
+   * При открытии страницы показываем последний выполненный расчёт, а не образец: человек
+   * возвращается к тому, что считал, а не к вшитому в стенд конкурсному набору. Если расчётов
+   * ещё не было — открывается образец.
+   */
+  async function loadLast() {
+    const info = await api('/result/last');               // 404, если расчётов не было
+    const res = await api('/result/last/result');
+    try { renderInput(await api('/result/last/input-area')); } catch (e) { /* вход мог не сохраниться */ }
+    renderVariants(res);
+    const when = info.finished_at ? new Date(info.finished_at).toLocaleString('ru-RU') : '';
+    showLastBanner(`Показан последний расчёт${info.file ? ': ' + info.file : ''}`
+      + (info.input_features ? `, объектов на входе ${fmt(info.input_features)}` : '')
+      + (info.variants ? `, вариантов ${info.variants}` : '')
+      + (info.compute_millis ? `, ${(info.compute_millis / 1000).toFixed(1)} с` : '')
+      + (when ? ` · ${when}` : ''));
+    return true;
+  }
+
+  /** Плашка над картой: что именно показано и как вернуться к образцу. */
+  function showLastBanner(text) {
+    let box = document.getElementById('lastBanner');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'lastBanner';
+      box.className = 'notice';
+      box.style.margin = '0 0 10px';
+      const panel = document.getElementById('panel');
+      panel.insertBefore(box, panel.firstChild);
+    }
+    box.innerHTML = `<b>${text}</b>
+      <div class="row" style="margin-top:6px">
+        <button type="button" id="lastToSample">Показать конкурсный образец</button>
+      </div>`;
+    document.getElementById('lastToSample').addEventListener('click', async () => {
+      box.remove();
+      await loadSampleData();
+    });
+  }
+
+  async function loadSampleData() {
+    try {
+      renderInput(await api('/samples/dataset'));
+      renderVariants(await api('/samples/result'));
+      return true;
+    } catch (e) { return false; }
+  }
+
   async function loadSamples() {
     if (oidc.required && !token) return;
+    try {
+      await loadLast();
+      return;
+    } catch (e) { /* расчётов ещё не было — открываем образец */ }
     try {
       renderInput(await api('/samples/dataset'));
       renderVariants(await api('/samples/result'));

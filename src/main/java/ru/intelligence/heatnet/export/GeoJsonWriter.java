@@ -42,11 +42,31 @@ public class GeoJsonWriter {
         g.writeStringField(field, id);
     }
 
+    /** Прослеживаемость: чем и из чего получен файл. Не входит в обязательный состав раздела 7. */
+    private java.util.Map<String, Object> metadata;
+
+    public GeoJsonWriter metadata(java.util.Map<String, Object> m) {
+        this.metadata = m;
+        return this;
+    }
+
     public void write(List<Variant> variants, OutputStream out) throws IOException {
         try (JsonGenerator g = mapper.getFactory().createGenerator(out)) {
             g.writeStartObject();
             g.writeStringField("type", "FeatureCollection");
             g.writeStringField("name", "heatnet_result");
+            if (metadata != null && !metadata.isEmpty()) {
+                g.writeObjectFieldStart("metadata");
+                for (java.util.Map.Entry<String, Object> e : metadata.entrySet()) {
+                    Object v = e.getValue();
+                    if (v == null) continue;
+                    if (v instanceof Integer || v instanceof Long) g.writeNumberField(e.getKey(), ((Number) v).longValue());
+                    else if (v instanceof Number) g.writeNumberField(e.getKey(), ((Number) v).doubleValue());
+                    else if (v instanceof Boolean) g.writeBooleanField(e.getKey(), (Boolean) v);
+                    else g.writeStringField(e.getKey(), String.valueOf(v));
+                }
+                g.writeEndObject();
+            }
             g.writeObjectFieldStart("crs");
             g.writeStringField("type", "name");
             g.writeObjectFieldStart("properties");
@@ -113,6 +133,10 @@ public class GeoJsonWriter {
         g.writeNumberField("routing_millis", v.routingMillis);
         g.writeNumberField("engineering_millis", v.engineeringMillis);
         g.writeNumberField("compute_millis", v.computeMillis);
+        // метрики геометрии: по ним видно, чем метод отличается от метода, а не только цифрой стоимости
+        g.writeNumberField("turns_per_km", GeoUtil.round(v.turnsPerKm, 1));
+        g.writeNumberField("median_straight_m", GeoUtil.round(v.medianStraightM, 1));
+        g.writeNumberField("oblique_turns", v.sharpTurns);
         g.writeNumberField("construction_cost", Math.round(v.constructionCost));
         g.writeNumberField("chamber_construction_cost", Math.round(v.chamberConstructionCost));
         g.writeNumberField("existing_chamber_tie_in_count", v.existingChamberTieInCount);
@@ -121,6 +145,56 @@ public class GeoJsonWriter {
         g.writeNumberField("calculated_cost", Math.round(v.calculatedCost));
         g.writeNumberField("new_network_length", GeoUtil.round(v.newNetworkLength, 2));
         g.writeNumberField("score", GeoUtil.round(v.score, 4));
+        // места пересечений с существующими коммуникациями в режиме глубины:
+        // сторона прохождения и вертикальное расстояние (приложение к ТЗ, разд. 7, пп. 3–4)
+        if (!v.depthCrossings.isEmpty()) {
+            g.writeArrayFieldStart("depth_crossings");
+            for (Variant.DepthCrossing c : v.depthCrossings) {
+                g.writeStartObject();
+                writeRef(g, "utility_id", c.utilityId);
+                g.writeStringField("utility_type", c.utilityType);
+                g.writeStringField("position", c.position);
+                if (!"conflict".equals(c.position)) g.writeNumberField("vertical_clearance_m", c.verticalClearanceM);
+                g.writeNumberField("required_clearance_m", c.requiredClearanceM);
+                g.writeNumberField("new_top_depth_m", c.newTopDepthM);
+                g.writeStringField("segment_id", c.segmentId);
+                g.writeNumberField("at_m", c.atM);
+                if (c.geom != null) {
+                    org.locationtech.jts.geom.Coordinate w = crs.toWgs(c.geom).getCoordinate();
+                    g.writeNumberField("lon", GeoUtil.round(w.x, 9));
+                    g.writeNumberField("lat", GeoUtil.round(w.y, 9));
+                }
+                if (c.note != null) g.writeStringField("note", c.note);
+                g.writeEndObject();
+            }
+            g.writeEndArray();
+        }
+        // влияние новых подключений на существующую сеть: добавленный расход по цепочке к источнику
+        // и требуемый ДУ (ТЗ 2.11, разд. 4 п. 6). Реконструкция не выполняется (Разъяснения п. 14),
+        // поэтому в стоимость варианта эти участки не входят.
+        if (!v.existingImpact.isEmpty()) {
+            g.writeArrayFieldStart("existing_network_impact");
+            for (Variant.ExistingImpact im : v.existingImpact) {
+                g.writeStartObject();
+                writeRef(g, "segment_id", im.segmentId);
+                g.writeNumberField("current_diameter", im.currentDiameter);
+                g.writeNumberField("current_flow_tph", im.currentFlowTph);
+                g.writeBooleanField("current_flow_known", im.flowKnown);
+                g.writeNumberField("added_flow_tph", im.addedFlowTph);
+                g.writeNumberField("total_flow_tph", im.totalFlowTph);
+                g.writeNumberField("loaded_share", im.loadedShare);
+                g.writeNumberField("required_diameter", im.requiredDiameter);
+                g.writeBooleanField("needs_upsize", im.needsUpsize);
+                g.writeEndObject();
+            }
+            g.writeEndArray();
+        }
+        // пометки по варианту: что требует ручной проработки (заполняются самопроверкой)
+        if (!v.notes.isEmpty()) {
+            g.writeArrayFieldStart("notes");
+            for (String n : v.notes) g.writeString(n);
+            g.writeEndArray();
+        }
         g.writeArrayFieldStart("unconnected_oks_ids");
         for (String id : v.unconnectedOksIds) {
             if (numericIds.contains(id)) {
@@ -145,6 +219,11 @@ public class GeoJsonWriter {
         g.writeEndObject();
         g.writeEndObject();
     }
+
+    /** Те же две операции нужны при обратной записи входных объектов (InputGeoJsonWriter). */
+    void writeGeometryPublic(JsonGenerator g, Geometry geom) throws IOException { writeGeometry(g, geom); }
+
+    void writeRefPublic(JsonGenerator g, String field, String id) throws IOException { writeRef(g, field, id); }
 
     private void writeGeometry(JsonGenerator g, Geometry geom) throws IOException {
         g.writeStartObject();

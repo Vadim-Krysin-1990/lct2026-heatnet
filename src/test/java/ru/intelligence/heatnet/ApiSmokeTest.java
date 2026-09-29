@@ -15,6 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -86,6 +87,28 @@ class ApiSmokeTest {
                 .andExpect(status().isUnprocessableEntity()).andReturn();
         JsonNode body = json.readTree(res.getResponse().getContentAsString());
         assertTrue(body.get("diagnostics").get("errors").asInt() >= 2, "нет источника и сети");
+    }
+
+    @Test
+    void resultCarriesMetadataAndSchemaIsPublished() throws Exception {
+        byte[] data = getClass().getResourceAsStream("/contest_dataset.geojson").readAllBytes();
+        MvcResult res = mvc.perform(multipart("/api/process")
+                        .file(new MockMultipartFile("file", "in.geojson", "application/geo+json", data)))
+                .andExpect(status().isOk()).andReturn();
+        res.getAsyncResult();
+        JsonNode fc = json.readTree(res.getResponse().getContentAsByteArray());
+        JsonNode meta = fc.get("metadata");
+        assertNotNull(meta, "в результате должен быть блок metadata");
+        // прослеживаемость: по какому файлу и какой редакции правил получен результат
+        assertTrue(meta.get("input_sha256").asText().matches("[0-9a-f]{64}"), meta.toString());
+        assertEquals("EPSG:32637", meta.get("crs_calculation").asText());
+        assertTrue(meta.get("compute_millis").asLong() > 0);
+
+        // схема выходного файла доступна для независимой проверки
+        MvcResult sch = mvc.perform(get("/api/schema/result")).andExpect(status().isOk()).andReturn();
+        JsonNode schema = json.readTree(sch.getResponse().getContentAsString());
+        assertEquals("https://json-schema.org/draft/2020-12/schema", schema.get("$schema").asText());
+        assertTrue(schema.at("/$defs/variantSummary").isObject(), "в схеме должен быть разбор variant_summary");
     }
 
     @Test

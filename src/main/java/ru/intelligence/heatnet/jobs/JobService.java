@@ -65,6 +65,8 @@ public class JobService {
         storage = Paths.get(props.getStorageDir());
         Files.createDirectories(storage.resolve("input"));
         Files.createDirectories(storage.resolve("result"));
+        Files.createDirectories(storage.resolve("input-area"));
+        Files.createDirectories(storage.resolve("last"));
         pool = Executors.newFixedThreadPool(Math.max(1, props.getWorkers()));
         // задания, оставшиеся RUNNING после перезапуска, — в очередь заново
         for (JobEntity j : repo.findByStatusOrderByCreatedAtAsc(JobEntity.Status.RUNNING.name())) {
@@ -124,11 +126,101 @@ public class JobService {
         return r;
     }
 
+    /**
+     * Последний успешный расчёт: просмотрщик открывается на нём, а не на образце, поэтому после
+     * перезагрузки страницы видно то, что считали последним. Хранится рядом с заданиями.
+     */
+    public Path lastPath(String name) {
+        return storage.resolve("last").resolve(name);
+    }
+
+    /** Запомнить расчёт как последний: результат, объекты области расчёта и описание. */
+    public void rememberLast(Path result, Path inputArea, Map<String, Object> info) {
+        try {
+            Files.copy(result, lastPath("result.geojson"), StandardCopyOption.REPLACE_EXISTING);
+            if (inputArea != null && Files.isReadable(inputArea)) {
+                Files.copy(inputArea, lastPath("input-area.geojson"), StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                Files.deleteIfExists(lastPath("input-area.geojson"));
+            }
+            Files.write(lastPath("info.json"), json.writeValueAsBytes(info));
+        } catch (Exception e) {
+            log.warn("не удалось запомнить последний расчёт: {}", e.toString());
+        }
+    }
+
+    /** Запомнить синхронный расчёт: результат уже собран в памяти, объекты области пишем рядом. */
+    public void rememberSyncResult(byte[] result, SyncResult r, Map<String, Object> info) {
+        try {
+            Files.write(lastPath("result.geojson"), result);
+            try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(lastPath("input-area.geojson")), 1 << 16)) {
+                new ru.intelligence.heatnet.export.InputGeoJsonWriter(r.loader.crs(), r.model.numericIds)
+                        .write(r.model, os);
+            } catch (Exception e) {
+                Files.deleteIfExists(lastPath("input-area.geojson"));
+            }
+            Files.write(lastPath("info.json"), json.writeValueAsBytes(info));
+        } catch (Exception e) {
+            log.warn("не удалось запомнить последний расчёт: {}", e.toString());
+        }
+    }
+
+    /** Описание последнего расчёта или null, если расчётов ещё не было. */
+    public Map<String, Object> lastInfo() {
+        try {
+            Path p = lastPath("info.json");
+            if (!Files.isReadable(p) || !Files.isReadable(lastPath("result.geojson"))) return null;
+            return json.readValue(Files.readAllBytes(p), Map.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Файл с входными объектами области расчёта (для просмотрщика). */
+    public Path inputAreaPath(String id) {
+        return storage.resolve("input-area").resolve(id + ".geojson");
+    }
+
+    /**
+     * SHA-256 входного потока: прослеживаемость результата — видно, из какого именно файла он получен.
+     * Считается отдельным проходом, потому что разбор закрывает поток по своему усмотрению.
+     */
+    public static String sha256(InputStream in) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) >= 0) md.update(buf, 0, n);
+            return hex(md.digest());
+        } catch (Exception e) {
+            log.warn("не удалось посчитать SHA-256 входного потока: {}", e.toString());
+            return null;
+        }
+    }
+
+    /** Контрольная сумма уже сохранённого файла задания. */
+    private static String sha256(java.nio.file.Path p) {
+        try (InputStream in = new BufferedInputStream(Files.newInputStream(p), 1 << 20)) {
+            return sha256(in);
+        } catch (Exception e) {
+            log.warn("не удалось посчитать SHA-256 файла {}: {}", p, e.toString());
+            return null;
+        }
+    }
+
+    static String hex(byte[] b) {
+        StringBuilder sb = new StringBuilder(b.length * 2);
+        for (byte x : b) sb.append(Character.forDigit((x >> 4) & 0xF, 16)).append(Character.forDigit(x & 0xF, 16));
+        return sb.toString();
+    }
+
     public static class SyncResult {
         public InputModel model;
         public InputLoader loader;
         public List<Variant> variants;
         public long millis;
+        /** SHA-256 входного файла — прослеживаемость результата. */
+        public String inputSha256;
     }
 
     void run(String id) {
@@ -180,9 +272,22 @@ public class JobService {
             VariantPlanner.Outcome out = new VariantPlanner(rules).plan(model, depth, variants, methods);
             Path result = storage.resolve("result").resolve(id + ".geojson");
             try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(result), 1 << 16)) {
-                new GeoJsonWriter(loader.crs(), model.numericIds).write(out.variants, os);
+                new GeoJsonWriter(loader.crs(), model.numericIds)
+                        .metadata(ru.intelligence.heatnet.export.ResultMetadata.of(sha256(input), model.totalFeatures,
+                                System.currentTimeMillis() - t0, depth, methods))
+                        .write(out.variants, os);
             }
             j.setResultPath(result.toString());
+            // объекты входа, попавшие в область расчёта: просмотрщик рисует по ним карту загруженного
+            // файла — сам файл (до 3 ГБ) в браузер не передать
+            Path inputArea = storage.resolve("input-area").resolve(id + ".geojson");
+            try (OutputStream os = new BufferedOutputStream(Files.newOutputStream(inputArea), 1 << 16)) {
+                new ru.intelligence.heatnet.export.InputGeoJsonWriter(loader.crs(), model.numericIds).write(model, os);
+            } catch (Exception e) {
+                // вспомогательный файл для карты просмотрщика: его отсутствие не должно ронять расчёт
+                log.warn("Не удалось записать входные объекты области расчёта для задания {}: {}", id, e.toString());
+                try { Files.deleteIfExists(inputArea); } catch (Exception ignore) { }
+            }
             j.setVariantsCount(out.variants.size());
             if (!out.variants.isEmpty()) {
                 j.setBestScore(out.variants.get(0).score);
@@ -190,6 +295,17 @@ public class JobService {
                 j.setUnconnectedCount(out.variants.get(0).unconnectedOksIds.size());
             }
             j.setComputeMillis(System.currentTimeMillis() - t0);
+            Map<String, Object> lastInfo = new java.util.LinkedHashMap<>();
+            lastInfo.put("source", "задание " + id);
+            lastInfo.put("file", j.getOriginalFilename());
+            lastInfo.put("size_bytes", j.getInputSize());
+            lastInfo.put("input_features", model.totalFeatures);
+            lastInfo.put("variants", out.variants.size());
+            lastInfo.put("compute_millis", j.getComputeMillis());
+            lastInfo.put("depth_mode", depth);
+            lastInfo.put("methods", methods == null || methods.isEmpty() ? "grid" : methods);
+            lastInfo.put("finished_at", Instant.now().toString());
+            rememberLast(result, inputArea, lastInfo);
             j.setDiagnosticsJson(json.writeValueAsString(diagnosticsMap(model.diagnostics)));
             j.setStatus(JobEntity.Status.DONE.name());
             Map<String, Object> ev = new java.util.LinkedHashMap<>();

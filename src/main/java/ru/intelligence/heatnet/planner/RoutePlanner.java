@@ -383,7 +383,10 @@ public class RoutePlanner {
         full = mergeCollinear(full);
         // «шпильки» — микроизломы с поворотом круче 90° на стыке коридора выхода с растровым путём
         // и на проекции конца на цель; ТП §2.1 такие повороты запрещает
-        full = mergeCollinear(despike(full, rr.despikeMaxM));
+        // у графа видимости звенья длиннее: разворот на стыке коридора и первого ребра графа
+        // не укладывается в обычный порог шпильки, поэтому для него порог свой
+        double spikeLimit = "visibility".equals(routingMethodOf(strategy)) ? rr.visibilitySpikeMaxM : rr.despikeMaxM;
+        full = mergeCollinear(despike(full, spikeLimit));
         if (strategy.freeAngle) full = mergeCollinear(PathSimplifier.pullStraight(w, full, 2));
 
         Node leaf = nb.addNode(NodeKind.CONNECTION_POINT, cp.geom.getCoordinate(), cp.id);
@@ -429,8 +432,10 @@ public class RoutePlanner {
         // Конец пути мог сместиться уже после упрощения (перенос в существующую камеру по правилу 10 м,
         // проекция на цель), поэтому нормализуем геометрию в последнюю очередь: снимаем шпильки и
         // срезаем оставшиеся повороты круче 90° — ТП §2.1 их запрещает.
-        double spike = "visibility".equals(routingMethodOf(strategy)) ? rr.despikeMaxM * 2 : rr.despikeMaxM;
+        double spike = "visibility".equals(routingMethodOf(strategy)) ? rr.visibilitySpikeMaxM : rr.despikeMaxM;
         full = mergeCollinear(despike(full, spike));
+        // срезаем с запасом: после склейки коллинеарных звеньев и деления участков угол может
+        // подрасти на доли градуса, а предел 90° обязателен (ТП §2.1)
         full = mergeCollinear(clampTurns(w, full, rr.maxTurnDeg));
         // после срезки углов короткое звено могло появиться снова
         full = mergeCollinear(despike(full, spike));
@@ -470,8 +475,18 @@ public class RoutePlanner {
      * и место присоединения) неподвижны.
      */
     static List<Coordinate> clampTurns(RasterWindow w, List<Coordinate> pts, double maxTurnDeg) {
+        return clampTurns(w, pts, maxTurnDeg, null, 0);
+    }
+
+    /**
+     * То же с «мягкой» зоной вокруг точки подключения: там трасса идёт по коридору выхода внутри
+     * буфера своего здания, и растровая проверка свободы запрещает любую фаску, хотя отступ от
+     * чужих объектов сохраняется и перепроверяется после подбора диаметров.
+     */
+    static List<Coordinate> clampTurns(RasterWindow w, List<Coordinate> pts, double maxTurnDeg,
+                                       Coordinate soft, double softRadiusM) {
         List<Coordinate> out = new ArrayList<>(pts);
-        for (int pass = 0; pass < 4; pass++) {
+        for (int pass = 0; pass < 6; pass++) {
             boolean changed = false;
             for (int i = 1; i + 1 < out.size(); i++) {
                 Coordinate a = out.get(i - 1), b = out.get(i), c = out.get(i + 1);
@@ -480,10 +495,11 @@ public class RoutePlanner {
                 double maxCut = Math.min(Math.min(la, lc) * 0.5, 4.0);
                 // фаска у самой границы буфера может не пройти по свободе — пробуем короче
                 Coordinate p1 = null, p2 = null;
-                for (double cut = maxCut; cut >= 0.2; cut /= 2) {
+                boolean near = soft != null && soft.distance(b) <= softRadiusM;
+                for (double cut = maxCut; cut >= 0.05; cut /= 2) {
                     Coordinate q1 = along(b, a, cut), q2 = along(b, c, cut);
-                    if (PathSimplifier.segmentFree(w, a, q1) && PathSimplifier.segmentFree(w, q1, q2)
-                            && PathSimplifier.segmentFree(w, q2, c)) { p1 = q1; p2 = q2; break; }
+                    if (near || (PathSimplifier.segmentFree(w, a, q1) && PathSimplifier.segmentFree(w, q1, q2)
+                            && PathSimplifier.segmentFree(w, q2, c))) { p1 = q1; p2 = q2; break; }
                 }
                 if (p1 == null) continue;
                 out.set(i, p1);
@@ -494,6 +510,24 @@ public class RoutePlanner {
             if (!changed) break;
         }
         return out;
+    }
+
+    /** Повороты вокруг изменённой вершины не круче 90° (ТП §2.1). */
+    private static boolean anglesOk(List<Coordinate> pts, int from) {
+        int a = Math.max(1, from), b = Math.min(pts.size() - 2, from + 2);
+        for (int i = a; i <= b; i++) {
+            if (PathSimplifier.turnDeg(pts.get(i - 1), pts.get(i), pts.get(i + 1)) > 90 + 1e-6) return false;
+        }
+        return true;
+    }
+
+    /** Свободны ли звенья вокруг изменённой вершины (по одному с каждой стороны). */
+    private static boolean linksFree(RasterWindow w, List<Coordinate> pts, int from) {
+        int a = Math.max(0, from), b = Math.min(pts.size() - 1, from + 2);
+        for (int i = a; i < b; i++) {
+            if (!PathSimplifier.segmentFree(w, pts.get(i), pts.get(i + 1))) return false;
+        }
+        return true;
     }
 
     /** Точка на отрезке from→to на расстоянии dist от from. */
@@ -510,23 +544,59 @@ public class RoutePlanner {
      * (точка подключения и точка врезки неподвижны).
      */
     static List<Coordinate> despike(List<Coordinate> pts, double maxSpike) {
+        return despike(null, pts, maxSpike, null, 0, 0);
+    }
+
+    /**
+     * Шпильки у точки подключения: трасса выходит по нормали к стене, а путь уходит в обратную
+     * сторону, и разворот получается длиннее обычного микроизлома. В радиусе softRadiusM от точки
+     * подключения снимаем звенья до longSpike, дальше — обычный порог.
+     */
+    static List<Coordinate> despike(List<Coordinate> pts, double maxSpike, Coordinate soft,
+                                    double softRadiusM, double longSpike) {
+        return despike(null, pts, maxSpike, soft, softRadiusM, longSpike);
+    }
+
+    /**
+     * То же со проверкой свободного места: схлопывание шпильки спрямляет трассу, и без проверки
+     * она может уйти в запретную зону. Если окно передано, изменение применяется только когда
+     * новые звенья свободны.
+     */
+    static List<Coordinate> despike(RasterWindow w, List<Coordinate> pts, double maxSpike) {
+        return despike(w, pts, maxSpike, null, 0, 0);
+    }
+
+    static List<Coordinate> despike(RasterWindow w, List<Coordinate> pts, double maxSpike,
+                                    Coordinate soft, double softRadiusM, double longSpike) {
         List<Coordinate> out = new ArrayList<>(pts);
         boolean changed = true;
         int guard = 0;
         while (changed && guard++ < 100 && out.size() > 2) {
             changed = false;
             for (int i = 0; i + 1 < out.size(); i++) {
-                if (out.get(i).distance(out.get(i + 1)) > maxSpike) continue;
+                double limit = maxSpike;
+                if (soft != null && longSpike > maxSpike
+                        && (soft.distance(out.get(i)) <= softRadiusM || soft.distance(out.get(i + 1)) <= softRadiusM)) {
+                    limit = longSpike;
+                }
+                if (out.get(i).distance(out.get(i + 1)) > limit) continue;
                 boolean spike = (i > 0 && PathSimplifier.turnDeg(out.get(i - 1), out.get(i), out.get(i + 1)) > 90 + 1e-6)
                         || (i + 2 < out.size() && PathSimplifier.turnDeg(out.get(i), out.get(i + 1), out.get(i + 2)) > 90 + 1e-6);
                 if (!spike) continue;
-                if (i == 0) out.remove(1);
-                else if (i + 1 == out.size() - 1) out.remove(i);
+                List<Coordinate> trial = new ArrayList<>(out);
+                int touched;
+                if (i == 0) { trial.remove(1); touched = 0; }
+                else if (i + 1 == out.size() - 1) { trial.remove(i); touched = i - 1; }
                 else {
                     Coordinate a = out.get(i), b = out.get(i + 1);
-                    out.set(i, new Coordinate((a.x + b.x) / 2, (a.y + b.y) / 2));
-                    out.remove(i + 1);
+                    trial.set(i, new Coordinate((a.x + b.x) / 2, (a.y + b.y) / 2));
+                    trial.remove(i + 1);
+                    touched = i - 1;
                 }
+                if (w != null && !linksFree(w, trial, touched)) continue;
+                // схлопывание шпильки не должно создавать новый резкий поворот на её месте
+                if (!anglesOk(trial, touched)) continue;
+                out = trial;
                 changed = true;
                 break;
             }

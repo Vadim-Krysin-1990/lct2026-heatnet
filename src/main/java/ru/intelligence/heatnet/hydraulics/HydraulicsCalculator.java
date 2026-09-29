@@ -264,6 +264,12 @@ public class HydraulicsCalculator {
                         t.existingObjectType = "heat_network";
                         t.existingDiameter = topo.segment(n.existingObjectId) != null ? topo.segment(n.existingObjectId).diameter : 0;
                         t.requiredDiameter = c.diameter;
+                        // суммарный расход, который новая сеть приносит в этот узел существующей сети:
+                        // нужен для распространения нагрузки к источнику (ExistingLoadAnalyzer)
+                        double added = 0;
+                        for (Edge e : n.edges) added += flow.get(e);
+                        t.addedFlowTph = added;
+                        t.fractionAlong = n.fractionAlong;
                         t.cost = 0;
                         t.toExistingChamber = false;
                         v.tieIns.add(t);

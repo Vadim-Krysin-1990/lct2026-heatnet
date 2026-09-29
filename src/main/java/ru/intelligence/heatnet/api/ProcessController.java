@@ -86,10 +86,16 @@ public class ProcessController {
         ev.put("variants_requested", variants);
         ev.put("methods", methods);
         events.info("PROCESS_START", "Принят файл на синхронный расчёт: " + file.getOriginalFilename(), ev);
+        // контрольная сумма входа — отдельным проходом: по ней в результате видно, из какого файла он получен
+        String sha;
+        try (InputStream in = file.getInputStream()) {
+            sha = JobService.sha256(in);
+        }
         JobService.SyncResult r;
         try (InputStream in = file.getInputStream()) {
             r = jobs.processSync(in, depth, variants, methods);
         }
+        r.inputSha256 = sha;
         if (r.model.diagnostics.hasErrors()) {
             Map<String, Object> bad = new LinkedHashMap<>(ev);
             bad.put("errors", r.model.diagnostics.count(ru.intelligence.heatnet.model.Diagnostics.Level.ERROR));
@@ -108,8 +114,32 @@ public class ProcessController {
         }
         events.write(ru.intelligence.heatnet.events.EventEntity.Level.INFO, "PROCESS_DONE",
                 "Расчёт выполнен: вариантов " + r.variants.size() + ", " + r.millis + " мс", done, null, r.millis);
-        GeoJsonWriter writer = new GeoJsonWriter(r.loader.crs(), r.model.numericIds);
-        StreamingResponseBody body = out -> writer.write(r.variants, out);
+        GeoJsonWriter writer = new GeoJsonWriter(r.loader.crs(), r.model.numericIds)
+                .metadata(ru.intelligence.heatnet.export.ResultMetadata.of(r.inputSha256, r.model.totalFeatures,
+                        r.millis, depth, methods));
+        // расчёт запоминается как последний: просмотрщик после перезагрузки страницы открывает его,
+        // а не образец — видно то, что считали, а не то, что было вшито в стенд
+        byte[] resultBytes = null;
+        try {
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream(1 << 20);
+            writer.write(r.variants, buf);
+            resultBytes = buf.toByteArray();
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("source", "синхронный расчёт");
+            info.put("file", file.getOriginalFilename());
+            info.put("size_bytes", file.getSize());
+            info.put("input_features", r.model.totalFeatures);
+            info.put("variants", r.variants.size());
+            info.put("compute_millis", r.millis);
+            info.put("depth_mode", depth);
+            info.put("methods", methods);
+            info.put("finished_at", java.time.Instant.now().toString());
+            jobs.rememberSyncResult(resultBytes, r, info);
+        } catch (Exception e) {
+            resultBytes = null;                       // не удалось — отдаём потоком, как раньше
+        }
+        final byte[] ready = resultBytes;
+        StreamingResponseBody body = ready != null ? out -> out.write(ready) : out -> writer.write(r.variants, out);
         Map<String, Object> summary = new LinkedHashMap<>();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"result.geojson\"")

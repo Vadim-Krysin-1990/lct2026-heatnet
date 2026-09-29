@@ -47,6 +47,17 @@ public class RoutingRules {
     public int visibilityVariantsInOutput = 0;
     /** Предельная длина «шпильки» — микроизлома с поворотом больше 90°, который снимается при сборке трассы. */
     public double despikeMaxM = 2.0;
+    /**
+     * Запас при срезке углов: целимся ниже предела 90°, потому что после склейки коллинеарных
+     * звеньев, спрямления и деления участков угол может подрасти на доли градуса.
+     */
+    public double turnMarginDeg = 0.0;
+    /**
+     * Порог шпильки для путей графа видимости: его рёбра длиннее растровых, и разворот на стыке
+     * коридора выхода с первым ребром графа не укладывается в обычные 2 м.
+     */
+    public double visibilitySpikeMaxM = 10.0;
+
     public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate",
             "visibility_shared", "visibility_separate", "shared_tree", "separate_parts");
 }
