@@ -135,6 +135,19 @@ public class NetworkBuilder {
     public Map<String, Node> nodes() { return nodes; }
     public List<Edge> edges() { return edges; }
 
+    /** Убрать ребро из сети вместе со ссылками на него в узлах (слияние камер). */
+    public void removeEdge(Edge e) {
+        e.a.edges.remove(e);
+        e.b.edges.remove(e);
+        edges.remove(e);
+    }
+
+    /** Убрать узел, у которого не осталось рёбер. */
+    public void removeNode(Node n) {
+        if (!n.edges.isEmpty()) throw new IllegalStateException("у узла " + n.id + " остались рёбра");
+        nodes.remove(n.id);
+    }
+
     /** Ребро, содержащее точку (в пределах допуска), либо null. */
     public Edge edgeNear(Coordinate c, double tol) {
         Edge best = null; double bd = tol;

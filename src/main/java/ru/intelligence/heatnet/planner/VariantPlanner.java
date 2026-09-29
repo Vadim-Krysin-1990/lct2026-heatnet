@@ -93,6 +93,7 @@ public class VariantPlanner {
             if ("grid".equals(want) && isVis) continue;
             if ("visibility".equals(want) && !isVis) continue;
             st.depthMode = depthMode;
+            if (st.tieInPenalty == 0) st.tieInPenalty = rules.routing().tieInPenaltyRub;
             if (st.gridBearingDeg < 0) st.gridBearingDeg = gridBearing;
             idx++;
             long ts = System.currentTimeMillis();
@@ -114,6 +115,14 @@ public class VariantPlanner {
             for (RoutePlanner.PointResult r : res) {
                 expanded += r.expanded;
                 if (!r.connected) v.unconnectedOksIds.add(r.cp.id);
+            }
+            if (st.mergeChambers) {
+                int gone = new ChamberMerger(field, ref, rules.routing().chamberMergeRadiusM,
+                        ref.chambers.maxBranches, rules.routing().maxTurnDeg).merge(nb, diag, v.variantId);
+                if (gone == 0) {
+                    diag.info("CHAMBER_MERGE", "Вариант " + v.variantId
+                            + ": близких камер, которые можно свести, не нашлось — вариант совпадает с базовым", null);
+                }
             }
             long tEng = System.currentTimeMillis();
             HydraulicsCalculator hc = new HydraulicsCalculator(ref, topo, model);
@@ -311,6 +320,31 @@ public class VariantPlanner {
                 s.gridBearingDeg = -1;
                 s.freeAngle = true;
                 s.description = "Кратчайшая трассировка со спрямлением: после поиска по сетке трасса спрямляется произвольным углом там, где прямая свободна (ТП от 21.09 §2.1 допускает любой поворот до 90°); точки объединяются в одно дерево";
+                break;
+            }
+            case "free_angle_merged": {
+                s.kind = "shortest";
+                s.title = "Кратчайший: спрямление, камеры сведены";
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().freeAngleTurnPenaltyM;
+                s.sharpTurnFactor = 1;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.freeAngle = true;
+                s.mergeChambers = true;
+                s.description = "То же спрямление, что и в кратчайшем варианте, но близко стоящие тепловые камеры сведены в одну: камера — самая дорогая штучная позиция сметы, и два разветвления в двадцати метрах друг от друга по существу один узел";
+                break;
+            }
+            case "orthogonal_merged": {
+                s.kind = "engineering";
+                s.title = "Инженерный: общая сеть, камеры сведены";
+                s.attachToNewNetwork = true; s.order = "distance";
+                s.turnPenaltyM = rules.routing().orthogonalTurnPenaltyM;
+                s.sharpTurnFactor = rules.routing().sharpTurnFactor;
+                s.directions = 8;
+                s.gridBearingDeg = -1;
+                s.mergeChambers = true;
+                s.description = "Инженерная геометрия вдоль застройки с объединением близких тепловых камер: меньше узлов при той же трассе";
                 break;
             }
             case "free_angle_separate": {

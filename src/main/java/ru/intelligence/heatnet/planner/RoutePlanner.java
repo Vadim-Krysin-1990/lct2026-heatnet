@@ -51,6 +51,14 @@ public class RoutePlanner {
         public double attachPenalty = 0;
         /** Режим с учётом глубины: стоимость профиля пересечений влияет на выбор маршрута. */
         public boolean depthMode = false;
+        /** Свести близко стоящие камеры в одну: минус камера и минус участок между ними. */
+        public boolean mergeChambers = false;
+        /**
+         * Надбавка к стоимости присоединения к существующей сети. Каждое такое присоединение — это
+         * отдельная камера на существующем трубопроводе; надбавка заставляет поиск вести ветви
+         * к общему стволу вместо того, чтобы врезаться в сеть у каждой точки.
+         */
+        public double tieInPenalty = 0;
         /** Разрешённых направлений: 8 (повороты кратны 45°) или 4 (только 90°, как у существующей сети). */
         public int directions = 8;
         /** Азимут сетки (град.): трасса идёт параллельно застройке и существующим сетям. */
@@ -283,7 +291,7 @@ public class RoutePlanner {
             // присоединение к участку — новая камера, её стоимость уже включает врезку (ТП §2.4, §3.2);
             // раньше здесь ошибочно прибавлялась ещё и стоимость врезки в камеру, и поиск
             // систематически предпочитал уход в существующую камеру за 5 млн
-            goal.terminalCost = newChamber;
+            goal.terminalCost = newChamber + strategy.tieInPenalty;
             goals.add(goal);
         }
         // новая сеть (общее дерево)
@@ -310,7 +318,11 @@ public class RoutePlanner {
                 RasterWindow.Goal g = new RasterWindow.Goal();
                 g.kind = "new_segment"; g.objectId = e.id;
                 g.geom = ls.getLength() > 3 * rr.gridStepM ? GeoUtil.substring(ls, rr.gridStepM / ls.getLength(), 1 - rr.gridStepM / ls.getLength()) : ls;
-                g.terminalCost = newChamber + strategy.attachPenalty;
+                // Ветвление посреди участка требует новой камеры, и её цена определяется наибольшим
+                // примыкающим диаметром — то есть диаметром ствола, а не подключаемой точки.
+                // Здесь точный диаметр ещё не известен, поэтому цена берётся с коэффициентом:
+                // иначе поиск систематически недооценивает новую камеру и ставит их больше, чем нужно.
+                g.terminalCost = newChamber * rr.branchOnSegmentCostFactor + strategy.attachPenalty;
                 g.terminalOnly = true;
                 goals.add(g);
             }

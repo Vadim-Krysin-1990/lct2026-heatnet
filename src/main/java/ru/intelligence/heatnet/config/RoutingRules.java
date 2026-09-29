@@ -57,6 +57,18 @@ public class RoutingRules {
      * коридора выхода с первым ребром графа не укладывается в обычные 2 м.
      */
     public double visibilitySpikeMaxM = 10.0;
+    /** Радиус, в пределах которого две тепловые камеры считаются одним узлом и сводятся в одну. */
+    public double chamberMergeRadiusM = 60.0;
+    /**
+     * Во сколько раз ветвление посреди участка дороже оценки по расходу подключаемой точки.
+     * Камера считается по наибольшему примыкающему диаметру, а он известен только после гидравлики.
+     */
+    public double branchOnSegmentCostFactor = 1.0;
+    /**
+     * Надбавка к стоимости присоединения к существующей сети, руб. Ведёт ветви к общему стволу
+     * вместо отдельной врезки у каждой точки: каждая врезка — это ещё одна камера на трубопроводе.
+     */
+    public double tieInPenaltyRub = 0;
 
     public List<String> strategies = List.of("orthogonal_city", "orthogonal_alt_tie_in", "orthogonal_shared", "free_angle_shared", "free_angle_separate",
             "visibility_shared", "visibility_separate", "shared_tree", "separate_parts");
